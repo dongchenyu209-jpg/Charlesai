@@ -221,6 +221,14 @@
   .msg.sticker{ font-size:34px; background:none !important; border:none !important; padding:0; box-shadow:none; }
   .msg.sticker img{ width:64px; height:64px; object-fit:contain; }
   .msg.redpacket{ background:linear-gradient(135deg,#C0392B,#8A2331); color:#fff; border:none !important; border-radius:10px; padding:10px 16px; min-width:130px; cursor:default; box-shadow:0 3px 8px -2px rgba(122,37,48,0.55); }
+  .quote-ref{
+    font-size:11px; opacity:.8; border-left:2.5px solid currentColor; padding:3px 8px; margin-bottom:6px; border-radius:3px;
+    background:rgba(0,0,0,0.06); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;
+  }
+  .quote-trigger{ cursor:pointer; opacity:.6; margin-left:6px; text-decoration:underline; }
+  .quote-bar{ padding:7px 12px; border-top:1px dashed var(--rule); background:var(--paper-2); }
+  .quote-bar-inner{ display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:11.5px; color:var(--ink-soft); }
+  .quote-bar-inner span:first-child{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .msg.redpacket.bot{ cursor:pointer; }
   .msg.redpacket .rp-top{ font-size:12px; opacity:.9; }
   .msg.redpacket .rp-amount{ font-size:21px; font-weight:900; margin-top:4px; }
@@ -385,6 +393,7 @@
         <div class="mini-btn" style="width:32px;height:32px;font-size:14px;" onclick="go('calls')" title="通话记录">🕑</div>
       </div>
       <div class="chat-msgs" id="chatMsgs"></div>
+      <div id="quoteBar" class="quote-bar hidden"></div>
       <div class="chat-input-bar">
         <div class="mini-btn" onclick="openCardPicker()">🎴</div>
         <div class="mini-btn" onclick="openStickerPicker('send')">😊</div>
@@ -628,6 +637,7 @@ let letters = [];
 let inboxLetters = [];
 let callLogs = [];
 let activeCall = null;
+let quoteTarget = null;
 let proactiveState = { nextMsgAt:null, nextLetterAt:null, nextCallAt:null };
 let chatUnread = false;
 let letterUnread = false;
@@ -949,21 +959,25 @@ function renderChat(){
     if(m.type==='pat' || m.type==='gesture'){
       return `<div style="text-align:center;font-size:11.5px;color:var(--ink-soft);margin:6px 0;">${m.content}</div>`;
     }
+    const quoteRefHtml = m.quoteOf
+      ? `<div class="quote-ref">${m.quoteOf.from==='user'?'我':chatSettings.companionName}: ${m.quoteOf.preview}</div>` : '';
+    const quoteBtn = `<span class="quote-trigger" onclick="setQuoteTarget('${m.id}')">↩引用</span>`;
     if(m.type==='sticker'){
       const val = m.content.startsWith('data:') ? `<img src="${m.content}">` : m.content;
-      return `<div class="msg sticker ${m.from}">${val}<div class="t" style="text-align:${m.from==='user'?'right':'left'};">${time}</div></div>`;
+      return `<div class="msg sticker ${m.from}">${quoteRefHtml}${val}<div class="t" style="text-align:${m.from==='user'?'right':'left'};">${time}${quoteBtn}</div></div>`;
     }
     if(m.type==='redpacket'){
       const revealed = m.from==='user' || m.opened;
       const tapAttr = revealed ? '' : `onclick="openRedPacket('${m.id}')"`;
       return `<div class="msg redpacket ${m.from}" ${tapAttr}>
+        ${quoteRefHtml}
         <div class="rp-top">🧧 ${m.note||'红包'}</div>
         ${revealed ? `<div class="rp-amount">¥${Number(m.amount).toFixed(2)}</div>` : `<div class="rp-tap">点击查收</div>`}
-        <div class="t" style="color:rgba(255,255,255,0.75);">${time}</div>
+        <div class="t" style="color:rgba(255,255,255,0.75);">${time}${quoteBtn}</div>
       </div>`;
     }
     const readTag = (m.from==='user' && m.read) ? ' · 已读' : '';
-    return `<div class="msg ${m.from}">${m.content}<div class="t">${time}${readTag}</div></div>`;
+    return `<div class="msg ${m.from}">${quoteRefHtml}${m.content}<div class="t">${time}${readTag}${quoteBtn}</div></div>`;
   }).join('');
   scrollChatBottom();
 }
@@ -979,11 +993,51 @@ function scrollChatBottom(){
   setTimeout(()=>{ wrap.scrollTop = wrap.scrollHeight; }, 30);
 }
 
+/* ---- 引用消息：我可以引用，TA 也可以引用 ---- */
+function buildQuotePreview(m){
+  if(m.type==='sticker') return '[表情]';
+  if(m.type==='redpacket') return '[红包]' + (m.note ? ('·'+m.note) : '');
+  if(m.type==='pat' || m.type==='gesture') return m.content;
+  return (m.content||'').slice(0,40);
+}
+function setQuoteTarget(id){
+  const m = chatMessages.find(x=>x.id===id);
+  if(!m) return;
+  quoteTarget = { id:m.id, from:m.from, preview: buildQuotePreview(m) };
+  renderQuoteBar();
+  const inp = document.getElementById('chatInput');
+  if(inp) inp.focus();
+}
+function clearQuoteTarget(){
+  quoteTarget = null;
+  renderQuoteBar();
+}
+function renderQuoteBar(){
+  const bar = document.getElementById('quoteBar');
+  if(!bar) return;
+  if(!quoteTarget){ bar.classList.add('hidden'); bar.innerHTML=''; return; }
+  bar.classList.remove('hidden');
+  const who = quoteTarget.from==='user' ? '我' : chatSettings.companionName;
+  bar.innerHTML = `<div class="quote-bar-inner"><span>回复 ${who}：${quoteTarget.preview}</span><span class="close-x" onclick="clearQuoteTarget()">✕</span></div>`;
+}
+/* TA 自己回复时，随机决定要不要引用聊天记录里的某一条，纯随机不看内容对不对得上 */
+function maybeQuoteMessage(){
+  const candidates = chatMessages.filter(m=> (m.type==='text' || !m.type) );
+  if(candidates.length===0) return null;
+  if(Math.random() < 0.5){ // 不设区间，就是最朴素的对半抛硬币，跟已读不回那个逻辑一致
+    const target = candidates[Math.floor(Math.random()*candidates.length)];
+    return { id: target.id, from: target.from, preview: buildQuotePreview(target) };
+  }
+  return null;
+}
+
 async function sendUserMessage(){
   const inp = document.getElementById('chatInput');
   const text = inp.value.trim(); if(!text) return;
   inp.value='';
-  chatMessages.push({id:uid(), from:'user', type:'text', content:text, time:Date.now(), read:false});
+  const msg = {id:uid(), from:'user', type:'text', content:text, time:Date.now(), read:false};
+  if(quoteTarget){ msg.quoteOf = quoteTarget; clearQuoteTarget(); }
+  chatMessages.push(msg);
   await sSet('chat-messages', chatMessages);
   renderChat();
   handleIncomingForBot(text);
@@ -1077,7 +1131,8 @@ function pickReplyFor(userText){
   }
   const text = getRandomCardText();
   if(!text) return null;
-  return { type:'text', content: text };
+  const quoteOf = maybeQuoteMessage();
+  return quoteOf ? { type:'text', content:text, quoteOf } : { type:'text', content:text };
 }
 
 /* ============================================================
@@ -1355,7 +1410,9 @@ function openCardPicker(){
   `);
 }
 async function sendCardText(text){
-  chatMessages.push({id:uid(), from:'user', type:'text', content:text, time:Date.now(), read:false});
+  const msg = {id:uid(), from:'user', type:'text', content:text, time:Date.now(), read:false};
+  if(quoteTarget){ msg.quoteOf = quoteTarget; clearQuoteTarget(); }
+  chatMessages.push(msg);
   await sSet('chat-messages', chatMessages);
   renderChat(); closeOverlay();
   handleIncomingForBot(text);
@@ -1376,7 +1433,9 @@ function openStickerPicker(){
   `);
 }
 async function sendStickerMsg(value){
-  chatMessages.push({id:uid(), from:'user', type:'sticker', content:value, time:Date.now(), read:false});
+  const msg = {id:uid(), from:'user', type:'sticker', content:value, time:Date.now(), read:false};
+  if(quoteTarget){ msg.quoteOf = quoteTarget; clearQuoteTarget(); }
+  chatMessages.push(msg);
   await sSet('chat-messages', chatMessages);
   renderChat(); closeOverlay();
   handleIncomingForBot('[表情]');
@@ -1397,7 +1456,9 @@ async function sendRedPacket(){
   const amount = parseFloat(document.getElementById('rpAmount').value);
   const note = document.getElementById('rpNote').value.trim() || '恭喜发财';
   if(isNaN(amount) || amount<=0){ alert('请输入金额'); return; }
-  chatMessages.push({id:uid(), from:'user', type:'redpacket', amount, note, opened:true, time:Date.now(), read:false});
+  const msg = {id:uid(), from:'user', type:'redpacket', amount, note, opened:true, time:Date.now(), read:false};
+  if(quoteTarget){ msg.quoteOf = quoteTarget; clearQuoteTarget(); }
+  chatMessages.push(msg);
   await sSet('chat-messages', chatMessages);
   renderChat(); closeOverlay();
   handleIncomingForBot('[红包]');
