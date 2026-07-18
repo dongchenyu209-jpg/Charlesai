@@ -506,28 +506,31 @@
    STORAGE HELPERS
    ============================================================ */
 let storageBroken = false;
+function hasCloudStorage(){ return typeof window.storage !== 'undefined' && window.storage !== null; }
 async function sGet(key, fallback){
-  try{
-    const r = await window.storage.get(key, false);
-    if(!r) return fallback;
-    return JSON.parse(r.value);
-  }catch(e){ return fallback; }
-}
-async function sSet(key, obj, attempt){
-  if(storageBroken) return; // 已确认这个环境存不进去，别再无意义地反复重试
-  attempt = attempt || 0;
-  try{
-    await window.storage.set(key, JSON.stringify(obj), false);
-    setSaveStatus('saved');
-  }catch(e){
-    console.warn('storage set failed, attempt', attempt, key, e);
-    if(attempt < 3){
-      setTimeout(()=>{ sSet(key, obj, attempt+1); }, 1000 * Math.pow(2, attempt));
-    } else {
-      storageBroken = true;
-      setSaveStatus('error');
-    }
+  if(hasCloudStorage() && !storageBroken){
+    try{
+      const r = await window.storage.get(key, false);
+      if(r) return JSON.parse(r.value);
+    }catch(e){ /* 忽略，往下走浏览器本地存储 */ }
   }
+  try{
+    const raw = localStorage.getItem('mirage:'+key);
+    if(raw !== null) return JSON.parse(raw);
+  }catch(e){ /* 浏览器本地存储也不可用（比如无痕模式） */ }
+  return fallback;
+}
+async function sSet(key, obj){
+  let ok = false;
+  if(hasCloudStorage() && !storageBroken){
+    try{ await window.storage.set(key, JSON.stringify(obj), false); ok = true; }
+    catch(e){ storageBroken = true; console.warn('cloud storage unavailable, falling back to browser storage'); }
+  }
+  try{
+    localStorage.setItem('mirage:'+key, JSON.stringify(obj));
+    ok = true;
+  }catch(e){ console.warn('localStorage set failed', key, e); }
+  setSaveStatus(ok ? 'saved' : 'error');
 }
 let _saveToastTimer = null;
 function setSaveStatus(state){
@@ -540,7 +543,7 @@ function setSaveStatus(state){
     el.classList.add('show');
     _saveToastTimer = setTimeout(()=>{ el.classList.remove('show'); }, 1100);
   } else if(state==='error'){
-    el.textContent = '⚠ 这个环境无法自动保存，请去"设置"里导出备份';
+    el.textContent = '⚠ 当前浏览器禁止了本地存储，建议去"设置"里导出备份';
     el.classList.add('warn');
     el.classList.add('show'); // 持续显示，提醒改用手动备份
   }
@@ -1428,7 +1431,10 @@ async function saveProfile(){
 async function resetAll(){
   if(!confirm('确定要清空全部数据吗？这个操作无法撤销。')) return;
   const keys = ['profile','chat-settings','chat-messages','cards-data','ledger-entries','period-entries','diary-entries','recipe-entries','theme-settings','moments-posts','letters','proactive-state','chat-unread','letter-unread'];
-  for(const k of keys){ try{ await window.storage.delete(k, false); }catch(e){} }
+  for(const k of keys){
+    try{ if(hasCloudStorage()) await window.storage.delete(k, false); }catch(e){}
+    try{ localStorage.removeItem('mirage:'+k); }catch(e){}
+  }
   location.reload();
 }
 
