@@ -685,114 +685,51 @@
 /* ============================================================
    STORAGE HELPERS
    ============================================================ */
- let storageBroken = false;
-let memoryCache = {};
-
-// IndexedDB 简单封装
-let dbPromise = null;
-function getDB() {
-  if (!dbPromise) {
-    dbPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open('EVAN_DB', 1);
-      request.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains('data')) {
-          db.createObjectStore('data');
-        }
-      };
-      request.onsuccess = (e) => resolve(e.target.result);
-      request.onerror = (e) => reject(e);
-    });
-  }
-  return dbPromise;
-}
-
-async function idbSet(key, value) {
-  try {
-    const db = await getDB();
-    return new Promise((resolve) => {
-      const tx = db.transaction('data', 'readwrite');
-      tx.objectStore('data').put(value, key);
-      tx.oncomplete = () => resolve(true);
-      tx.onerror = () => resolve(false);
-    });
-  } catch(e) { return false; }
-}
-
-async function idbGet(key) {
-  try {
-    const db = await getDB();
-    return new Promise((resolve) => {
-      const tx = db.transaction('data', 'readonly');
-      const req = tx.objectStore('data').get(key);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => resolve(null);
-    });
-  } catch(e) { return null; }
-}
-
+let storageBroken = false;
 function hasCloudStorage(){ return typeof window.storage !== 'undefined' && window.storage !== null; }
-
 async function sGet(key, fallback){
   if(hasCloudStorage() && !storageBroken){
     try{
       const r = await window.storage.get(key, false);
       if(r) return JSON.parse(r.value);
-    }catch(e){}
+    }catch(e){ /* 忽略，往下走浏览器本地存储 */ }
   }
   try{
     const raw = localStorage.getItem('EVAN:'+key);
     if(raw !== null) return JSON.parse(raw);
-  }catch(e){ 
-    storageBroken = true; 
-  }
-  if(memoryCache[key] !== undefined) return memoryCache[key];
-  const idbData = await idbGet(key);
-  if(idbData !== null) return idbData;
+  }catch(e){ /* 浏览器本地存储也不可用（比如无痕模式） */ }
   return fallback;
 }
-
 async function sSet(key, obj){
   let ok = false;
-  memoryCache[key] = obj;
-
   if(hasCloudStorage() && !storageBroken){
-    try{ 
-      await window.storage.set(key, JSON.stringify(obj), false); 
-      ok = true; 
-    }catch(e){ 
-      storageBroken = true; 
-    }
+    try{ await window.storage.set(key, JSON.stringify(obj), false); ok = true; }
+    catch(e){ storageBroken = true; console.warn('cloud storage unavailable, falling back to browser storage'); }
   }
   try{
     localStorage.setItem('EVAN:'+key, JSON.stringify(obj));
     ok = true;
-  }catch(e){ 
-    storageBroken = true; 
-  }
-  if(!ok){
-    ok = await idbSet(key, obj);
-  }
+  }catch(e){ console.warn('localStorage set failed', key, e); }
   setSaveStatus(ok ? 'saved' : 'error');
-  return ok;
 }
-
 let _saveToastTimer = null;
 function setSaveStatus(state){
   const el = document.getElementById('saveToast');
   if(!el) return;
   clearTimeout(_saveToastTimer);
   if(state==='saved'){
-    el.textContent = '已自动保存';
+    el.textContent = '✓ 已自动保存';
     el.classList.remove('warn');
     el.classList.add('show');
-    _saveToastTimer = setTimeout(()=>{ el.classList.remove('show'); }, 1200);
+    _saveToastTimer = setTimeout(()=>{ el.classList.remove('show'); }, 1100);
   } else if(state==='error'){
-    el.innerHTML = '存储被禁用！<br><small>请立即去设置导出备份</small>';
+    el.textContent = '⚠ 当前浏览器禁止了本地存储，建议去"设置"里导出备份';
     el.classList.add('warn');
-    el.classList.add('show');
+    el.classList.add('show'); // 持续显示，提醒改用手动备份
   }
 }
+function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
+
 /* ============================================================
    STATE
    ============================================================ */
