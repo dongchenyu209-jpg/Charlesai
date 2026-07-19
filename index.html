@@ -793,45 +793,7 @@ function setSaveStatus(state){
     el.classList.add('show');
   }
 }
-async function sSet(key, obj){
-  let ok = false;
-  memoryCache[key] = obj;
-
-  if(hasCloudStorage() && !storageBroken){
-    try{ 
-      await window.storage.set(key, JSON.stringify(obj), false); 
-      ok = true; 
-    }catch(e){ 
-      storageBroken = true; 
-    }
-  }
-  try{
-    localStorage.setItem('EVAN:'+key, JSON.stringify(obj));
-    ok = true;
-  }catch(e){ 
-    storageBroken = true; 
-    console.warn('localStorage 保存失败', key); 
-  }
-  setSaveStatus(ok ? 'saved' : 'error');
-  return ok;
-}
-
-let _saveToastTimer = null;
-function setSaveStatus(state){
-  const el = document.getElementById('saveToast');
-  if(!el) return;
-  clearTimeout(_saveToastTimer);
-  if(state==='saved'){
-    el.textContent = '已自动保存';
-    el.classList.remove('warn');
-    el.classList.add('show');
-    _saveToastTimer = setTimeout(()=>{ el.classList.remove('show'); }, 1200);
-  } else if(state==='error'){
-    el.innerHTML = '存储被禁用！<br><small>请立即去设置导出备份</small>';
-    el.classList.add('warn');
-    el.classList.add('show');
-  }
-}/* ============================================================
+/* ============================================================
    STATE
    ============================================================ */
 let profile = { name:'陆沉', status:'Status: 跌入你的宇宙 ☆°｡', avatar:'🌙', photo:null, myName:'我', myAvatar:'🙂', myBio:'', momentsCover:null };
