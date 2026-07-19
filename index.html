@@ -685,52 +685,67 @@
 /* ============================================================
    STORAGE HELPERS
    ============================================================ */
-let storageBroken = false;
+ let storageBroken = false;
+let memoryCache = {}; 
+
 function hasCloudStorage(){ return typeof window.storage !== 'undefined' && window.storage !== null; }
+
 async function sGet(key, fallback){
   if(hasCloudStorage() && !storageBroken){
     try{
       const r = await window.storage.get(key, false);
       if(r) return JSON.parse(r.value);
-    }catch(e){ /* 忽略，往下走浏览器本地存储 */ }
+    }catch(e){}
   }
   try{
     const raw = localStorage.getItem('EVAN:'+key);
     if(raw !== null) return JSON.parse(raw);
-  }catch(e){ /* 浏览器本地存储也不可用（比如无痕模式） */ }
+  }catch(e){ 
+    storageBroken = true; 
+  }
+  if(memoryCache[key] !== undefined) return memoryCache[key];
   return fallback;
 }
+
 async function sSet(key, obj){
   let ok = false;
+  memoryCache[key] = obj;
+
   if(hasCloudStorage() && !storageBroken){
-    try{ await window.storage.set(key, JSON.stringify(obj), false); ok = true; }
-    catch(e){ storageBroken = true; console.warn('cloud storage unavailable, falling back to browser storage'); }
+    try{ 
+      await window.storage.set(key, JSON.stringify(obj), false); 
+      ok = true; 
+    }catch(e){ 
+      storageBroken = true; 
+    }
   }
   try{
     localStorage.setItem('EVAN:'+key, JSON.stringify(obj));
     ok = true;
-  }catch(e){ console.warn('localStorage set failed', key, e); }
+  }catch(e){ 
+    storageBroken = true; 
+    console.warn('localStorage 保存失败', key); 
+  }
   setSaveStatus(ok ? 'saved' : 'error');
+  return ok;
 }
+
 let _saveToastTimer = null;
 function setSaveStatus(state){
   const el = document.getElementById('saveToast');
   if(!el) return;
   clearTimeout(_saveToastTimer);
   if(state==='saved'){
-    el.textContent = '✓ 已自动保存';
+    el.textContent = '已自动保存';
     el.classList.remove('warn');
     el.classList.add('show');
-    _saveToastTimer = setTimeout(()=>{ el.classList.remove('show'); }, 1100);
+    _saveToastTimer = setTimeout(()=>{ el.classList.remove('show'); }, 1200);
   } else if(state==='error'){
-    el.textContent = '⚠ 当前浏览器禁止了本地存储，建议去"设置"里导出备份';
+    el.innerHTML = '存储被禁用！<br><small>请立即去设置导出备份</small>';
     el.classList.add('warn');
-    el.classList.add('show'); // 持续显示，提醒改用手动备份
+    el.classList.add('show');
   }
-}
-function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
-
-/* ============================================================
+}/* ============================================================
    STATE
    ============================================================ */
 let profile = { name:'陆沉', status:'Status: 跌入你的宇宙 ☆°｡', avatar:'🌙', photo:null, myName:'我', myAvatar:'🙂', myBio:'', momentsCover:null };
