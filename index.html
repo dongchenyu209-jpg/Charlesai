@@ -54,7 +54,7 @@
   .hidden{ display:none !important; }
 
   /* ---- top bar ---- */
-  .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; position:relative; }
   .topbar .tb-left{ display:flex; align-items:center; gap:8px; }
   .icon-btn{
     width:36px;height:36px;border-radius:50%;
@@ -66,7 +66,10 @@
   }
   .icon-btn:active{ transform:scale(0.9); background:var(--blush); }
   .tb-title{ font-family:'Noto Serif SC', serif; font-weight:700; font-size:17px; letter-spacing:1px; }
-  .hero-name{ font-family:'Noto Serif SC', serif; font-weight:700; font-size:15px; letter-spacing:1px; color:var(--ink); }
+  .hero-name{
+    font-family:'Noto Serif SC', serif; font-weight:700; font-size:15px; letter-spacing:1px; color:var(--ink);
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); pointer-events:none;
+  }
 
   /* ---- profile card ---- */
   .profile-card{
@@ -255,7 +258,14 @@
   .moment-interactions{ background:var(--paper-2); border-radius:6px; padding:8px 10px; margin-top:8px; font-size:12.5px; }
   .moment-likes{ color:var(--rouge); }
   .moment-comment{ margin-top:4px; }
-  #view-moments{ background:#ffffff; min-height:calc(100vh - 40px); }
+  #view-moments{ min-height:calc(100vh - 40px); position:relative; }
+  .moments-fab{
+    position:fixed; left:24px; bottom:96px; z-index:60;
+    width:52px;height:52px;border-radius:50%; background:var(--rouge); color:#fff;
+    display:flex;align-items:center;justify-content:center; font-size:26px; font-weight:700;
+    box-shadow:0 4px 12px -2px rgba(122,37,48,0.55); cursor:pointer;
+  }
+  .moments-fab:active{ transform:scale(0.92); }
   .moment-actions{ display:flex; gap:14px; margin-top:8px; }
   .moment-like-btn{ font-size:12.5px; cursor:pointer; color:var(--ink-soft); }
   .moment-like-btn.active{ color:var(--rouge); }
@@ -289,6 +299,8 @@
   .msg .t{ font-size:9.5px; opacity:.65; margin-top:3px; }
   .msg.sticker{ font-size:34px; background:none !important; border:none !important; padding:0; box-shadow:none; }
   .msg.sticker img{ width:64px; height:64px; object-fit:contain; }
+  .msg.image{ background:none !important; border:none !important; padding:0; box-shadow:none; max-width:65%; }
+  .chat-image{ max-width:100%; max-height:220px; border-radius:8px; display:block; cursor:pointer; box-shadow:0 2px 6px -2px rgba(42,36,31,0.3); }
   .msg.redpacket{ background:linear-gradient(135deg,#C0392B,#8A2331); color:#fff; border:none !important; border-radius:10px; padding:10px 16px; min-width:130px; cursor:default; box-shadow:0 3px 8px -2px rgba(122,37,48,0.55); }
   .quote-ref{
     font-size:11px; opacity:.8; border-left:2.5px solid currentColor; padding:3px 8px; margin-bottom:6px; border-radius:3px;
@@ -358,14 +370,6 @@
   }
   .call-bubble-dot{ width:7px;height:7px;border-radius:50%; background:#4CD964; animation: pulseDot 1.2s infinite; flex-shrink:0; }
   @keyframes pulseDot{ 0%,100%{opacity:1;} 50%{opacity:.3;} }
-  .chat-splash{
-    position:fixed; inset:0; z-index:150; background:rgba(20,16,12,0.5);
-    display:flex; align-items:center; justify-content:center; pointer-events:none;
-
-opacity:1;
-transition:opacity .5s ease;
-  }
-  }
 </style>
 </head>
 <body>
@@ -383,6 +387,7 @@ transition:opacity .5s ease;
     <span class="call-bubble-dot"></span>
     <span id="callBubbleText">通话中 00:00</span>
   </div>
+
   <!-- ============ HOME ============ -->
   <section id="view-home" class="view">
     <div class="topbar">
@@ -482,6 +487,7 @@ transition:opacity .5s ease;
           <div class="cstat" id="chatCStat">在线</div>
         </div>
         <div class="mini-btn" style="width:32px;height:32px;font-size:14px;" onclick="openGesturePicker()" title="小动作">👋</div>
+        <div class="mini-btn" style="width:32px;height:32px;font-size:14px;" onclick="triggerProactiveMessage()" title="让TA主动找我">💌</div>
         <div class="mini-btn" style="width:32px;height:32px;font-size:14px;" onclick="startOutgoingCall()" title="打电话">📞</div>
         <div class="mini-btn" style="width:32px;height:32px;font-size:14px;" onclick="go('calls')" title="通话记录">🕑</div>
       </div>
@@ -491,6 +497,8 @@ transition:opacity .5s ease;
         <div class="mini-btn" onclick="openCardPicker()">🎴</div>
         <div class="mini-btn" onclick="openStickerPicker('send')">😊</div>
         <div class="mini-btn" onclick="openSendRedPacket()">🧧</div>
+        <div class="mini-btn" onclick="document.getElementById('chatImageInput').click()">🖼</div>
+        <input type="file" id="chatImageInput" accept="image/*" class="hidden" onchange="onChatImageFile(event)">
         <input type="text" id="chatInput" placeholder="说点什么…" onkeydown="if(event.key==='Enter')sendUserMessage()">
         <div class="mini-btn" onclick="sendUserMessage()">➤</div>
       </div>
@@ -628,6 +636,7 @@ transition:opacity .5s ease;
     </div>
     <div class="box">
       <div class="switch-row"><span>深色模式</span><div class="switch" id="darkSwitch" onclick="toggleDark()"><div class="dot"></div></div></div>
+      <div class="btn-row" style="margin-top:12px;"><div class="btn outline" onclick="resetAppearance()">恢复默认外观</div></div>
     </div>
   </section>
 
@@ -647,16 +656,8 @@ transition:opacity .5s ease;
       <span>🔍</span>
       <input type="text" id="momentsSearchInput" placeholder="搜索朋友圈…" onkeydown="if(event.key==='Enter')searchMoments()">
     </div>
-    <div class="box">
-      <textarea id="momentText" placeholder="分享点什么…"></textarea>
-      <div id="momentPhotoPreview"></div>
-      <input type="file" id="momentPhotoInput" accept="image/*" class="hidden" onchange="onMomentPhoto(event)">
-      <div class="btn-row">
-        <div class="btn outline" onclick="document.getElementById('momentPhotoInput').click()">📷 配图</div>
-        <div class="btn" onclick="postMoment()">发布</div>
-      </div>
-    </div>
     <div id="momentsList"></div>
+    <div class="moments-fab" onclick="openMomentComposer()">＋</div>
   </section>
 
   <!-- ============ LETTERS 写信 ============ -->
@@ -743,7 +744,7 @@ let periodEntries = [];
 let diaryEntries = [];
 let recipeEntries = [];
 let momentsPosts = [];
-let momentDraftPhoto = null;
+let momentDraftMedia = null;
 let letters = [];
 let inboxLetters = [];
 let callLogs = [];
@@ -775,7 +776,6 @@ const PAPER_PRESETS = {
    INIT
    ============================================================ */
 async function init(){
-  playOpeningSplash();
   profile = await sGet('profile', profile);
   if(!profile.myName) profile.myName = '我';
   if(!profile.myAvatar) profile.myAvatar = '🙂';
@@ -813,7 +813,6 @@ async function init(){
   themeSettings = await sGet('theme-settings', themeSettings);
 
   applyTheme();
-  applyChatBackground();
   renderHomeProfile();
   renderChat();
   renderCardsView();
@@ -1272,6 +1271,9 @@ function renderChat(){
       const val = m.content.startsWith('data:') ? `<img src="${m.content}">` : m.content;
       return `<div class="msg sticker ${m.from}">${quoteRefHtml}${val}<div class="t" style="text-align:${m.from==='user'?'right':'left'};">${time}${quoteBtn}</div></div>`;
     }
+    if(m.type==='image'){
+      return `<div class="msg image ${m.from}">${quoteRefHtml}<img class="chat-image" src="${m.content}" onclick="viewChatImage('${m.id}')"><div class="t" style="text-align:${m.from==='user'?'right':'left'};">${time}${(m.from==='user'&&m.read)?' · 已读':''}${quoteBtn}</div></div>`;
+    }
     if(m.type==='redpacket'){
       const revealed = m.from==='user' || m.opened;
       const tapAttr = revealed ? '' : `onclick="openRedPacket('${m.id}')"`;
@@ -1303,8 +1305,17 @@ function scrollChatBottom(){
 function buildQuotePreview(m){
   if(m.type==='sticker') return '[表情]';
   if(m.type==='redpacket') return '[红包]' + (m.note ? ('·'+m.note) : '');
+  if(m.type==='image') return '[图片]';
   if(m.type==='pat' || m.type==='gesture') return m.content;
   return (m.content||'').slice(0,40);
+}
+function viewChatImage(id){
+  const m = chatMessages.find(x=>x.id===id);
+  if(!m) return;
+  openOverlay(`
+    <div class="drawer-head"><h3>图片</h3><span class="close-x" onclick="closeOverlay()">✕</span></div>
+    <img src="${m.content}" style="width:100%; border-radius:6px;">
+  `);
 }
 function setQuoteTarget(id){
   const m = chatMessages.find(x=>x.id===id);
@@ -1347,6 +1358,20 @@ async function sendUserMessage(){
   await sSet('chat-messages', chatMessages);
   renderChat();
   handleIncomingForBot(text);
+}
+function onChatImageFile(e){
+  const f = e.target.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    const msg = {id:uid(), from:'user', type:'image', content:reader.result, time:Date.now(), read:false};
+    if(quoteTarget){ msg.quoteOf = quoteTarget; clearQuoteTarget(); }
+    chatMessages.push(msg);
+    await sSet('chat-messages', chatMessages);
+    renderChat();
+    handleIncomingForBot('[图片]');
+  };
+  reader.readAsDataURL(f);
+  e.target.value = '';
 }
 
 /* 已读不回开启后，每条消息都用抛硬币的方式随机决定这次回不回，不是设定好的固定比例 */
@@ -1496,6 +1521,14 @@ async function sendProactiveMessage(){
   await sSet('chat-messages', chatMessages);
   if(currentView==='chat'){ renderChat(); }
   else{ chatUnread = true; await sSet('chat-unread', true); renderUnreadDots(); }
+}
+/* 手动按一下，让TA提前"想起"要主动找我，不用干等随机时间到 */
+function triggerProactiveMessage(){
+  showTyping(true);
+  setTimeout(async ()=>{
+    showTyping(false);
+    await sendProactiveMessage();
+  }, 800 + Math.random()*1500);
 }
 async function sendProactiveLetter(){
   const lineCount = 2 + Math.floor(Math.random()*3);
@@ -1755,12 +1788,24 @@ async function clearChatBackground(){
   await sSet('chat-settings', chatSettings);
   applyChatBackground();
 }
+function hexToRgba(hex, alpha){
+  hex = (hex||'#F3EEE3').trim().replace('#','');
+  if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const r = parseInt(hex.substring(0,2),16) || 243;
+  const g = parseInt(hex.substring(2,4),16) || 238;
+  const b = parseInt(hex.substring(4,6),16) || 227;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 function applyChatBackground(){
   const el = document.getElementById('chatMsgs');
   if(!el) return;
-  el.style.backgroundImage = chatSettings.background
-    ? `linear-gradient(rgba(243,238,227,0.82), rgba(243,238,227,0.82)), url(${chatSettings.background})`
-    : 'none';
+  if(chatSettings.background){
+    const paperColor = getComputedStyle(document.documentElement).getPropertyValue('--paper');
+    const tint = hexToRgba(paperColor, 0.32);
+    el.style.backgroundImage = `linear-gradient(${tint}, ${tint}), url(${chatSettings.background})`;
+  } else {
+    el.style.backgroundImage = 'none';
+  }
   el.style.backgroundSize = 'cover';
   el.style.backgroundPosition = 'center';
 }
@@ -1921,29 +1966,55 @@ function renderRecipes(){
 /* ============================================================
    MOMENTS 朋友圈
    ============================================================ */
-function onMomentPhoto(e){
+function openMomentComposer(){
+  momentDraftMedia = null;
+  openOverlay(`
+    <div class="drawer-head"><h3>发一条朋友圈</h3><span class="close-x" onclick="closeOverlay()">✕</span></div>
+    <textarea id="momentText" placeholder="分享点什么…" style="min-height:90px;"></textarea>
+    <div id="momentMediaPreview"></div>
+    <input type="file" id="momentMediaInput" accept="image/*,video/*" class="hidden" onchange="onMomentMedia(event)">
+    <div class="btn-row">
+      <div class="btn outline" onclick="document.getElementById('momentMediaInput').click()">📎 配图 / 视频</div>
+      <div class="btn" onclick="postMoment()">发布</div>
+    </div>
+  `);
+}
+function onMomentMedia(e){
   const f = e.target.files[0]; if(!f) return;
+  const isVideo = f.type.startsWith('video/');
   const reader = new FileReader();
   reader.onload = ()=>{
-    momentDraftPhoto = reader.result;
-    document.getElementById('momentPhotoPreview').innerHTML =
-      `<div style="position:relative;margin-top:8px;"><img src="${momentDraftPhoto}" style="width:100%;border-radius:4px;">
-       <span class="del" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.5);color:#fff;border-radius:50%;padding:2px 7px;" onclick="clearMomentPhoto()">✕</span></div>`;
+    momentDraftMedia = { type: isVideo?'video':'image', src: reader.result };
+    const prev = document.getElementById('momentMediaPreview');
+    if(!prev) return;
+    const inner = isVideo
+      ? `<video src="${momentDraftMedia.src}" style="width:100%;border-radius:4px;" controls></video>`
+      : `<img src="${momentDraftMedia.src}" style="width:100%;border-radius:4px;">`;
+    prev.innerHTML = `<div style="position:relative;margin-top:8px;">${inner}
+       <span class="del" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.5);color:#fff;border-radius:50%;padding:2px 7px;" onclick="clearMomentMedia()">✕</span></div>`;
   };
   reader.readAsDataURL(f);
 }
-function clearMomentPhoto(){
-  momentDraftPhoto = null;
-  document.getElementById('momentPhotoPreview').innerHTML = '';
+function clearMomentMedia(){
+  momentDraftMedia = null;
+  const prev = document.getElementById('momentMediaPreview');
+  if(prev) prev.innerHTML = '';
 }
 async function postMoment(){
-  const text = document.getElementById('momentText').value.trim();
-  const photo = momentDraftPhoto;
-  if(!text && !photo){ alert('写点什么或配张图吧'); return; }
-  const post = { id:uid(), authorType:'user', text, photo, time:Date.now(), liked:false, comment:null, commented:false, likedByUser:false, comments:[] };
+  const textEl = document.getElementById('momentText');
+  const text = textEl ? textEl.value.trim() : '';
+  const media = momentDraftMedia;
+  if(!text && !media){ alert('写点什么或配张图/视频吧'); return; }
+  const post = {
+    id:uid(), authorType:'user', text, time:Date.now(),
+    photo: media && media.type==='image' ? media.src : null,
+    video: media && media.type==='video' ? media.src : null,
+    liked:false, comment:null, commented:false, likedByUser:false, comments:[]
+  };
   momentsPosts.unshift(post);
   await sSet('moments-posts', momentsPosts);
-  document.getElementById('momentText').value=''; clearMomentPhoto();
+  momentDraftMedia = null;
+  closeOverlay();
   renderMoments();
   scheduleMomentReaction(post.id);
 }
@@ -2042,6 +2113,7 @@ function renderMoments(){
         <div class="moment-name">${name}</div>
         ${p.text?`<div class="moment-text">${p.text}</div>`:''}
         ${p.photo?`<img class="moment-photo" src="${p.photo}">`:''}
+        ${p.video?`<video class="moment-photo" src="${p.video}" controls></video>`:''}
         <div class="moment-meta">${new Date(p.time).toLocaleString('zh-CN')}</div>
         <div class="moment-actions">${likeBtn}</div>
         ${likersLine}
@@ -2289,6 +2361,11 @@ async function toggleDark(){
   themeSettings.dark = !themeSettings.dark;
   await sSet('theme-settings', themeSettings); applyTheme(); renderBeautify();
 }
+async function resetAppearance(){
+  themeSettings = { accent:'#9C2F3B', paperStyle:'grid', paperColor:'cream', dark:false };
+  await sSet('theme-settings', themeSettings);
+  applyTheme(); renderBeautify();
+}
 function applyTheme(){
   document.documentElement.style.setProperty('--rouge', themeSettings.accent);
   document.documentElement.style.setProperty('--rouge-deep', themeSettings.accent);
@@ -2304,6 +2381,7 @@ function applyTheme(){
   if(themeSettings.paperStyle==='plain') document.body.classList.add('paper-plain');
   if(themeSettings.paperStyle==='dot') document.body.classList.add('paper-dot');
   document.body.setAttribute('data-dark', themeSettings.dark ? '1':'0');
+  applyChatBackground();
 }
 
 /* ============================================================
