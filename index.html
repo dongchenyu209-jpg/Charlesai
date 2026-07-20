@@ -41,7 +41,7 @@
     background-size: 22px 22px;
     background-attachment: fixed;
     color:var(--ink);
-    font-family:'Noto Sans SC', sans-serif;
+    font-family: var(--font-body, 'Noto Sans SC', sans-serif);
     min-height:100vh;
     transition: background-color .3s, color .3s;
   }
@@ -154,6 +154,18 @@
   .love-row{ text-align:center; font-family:'Noto Serif SC',serif; font-size:16px; letter-spacing:2px; }
   .love-row .love-word{ color:var(--rouge); font-weight:900; }
   .love-row .bond-pct{ font-weight:900; }
+  .anniv-row{ display:flex; flex-direction:column; align-items:center; margin-top:16px; }
+  .anniv-avatars{ display:flex; align-items:center; }
+  .anniv-avatar{
+    width:52px;height:52px;border-radius:50%; border:2.5px solid var(--paper);
+    box-shadow:0 0 0 1.5px var(--ink); background:var(--paper-2);
+    display:flex;align-items:center;justify-content:center; font-size:22px; overflow:hidden; cursor:pointer;
+  }
+  .anniv-avatar img{ width:100%; height:100%; object-fit:cover; }
+  .anniv-avatar.theirs{ margin-right:-16px; z-index:1; }
+  .anniv-avatar.mine{ z-index:2; }
+  .anniv-text{ margin-top:8px; font-size:13px; letter-spacing:1px; color:var(--ink-soft); cursor:pointer; }
+  .anniv-text b{ color:var(--rouge); font-size:16px; font-family:'Noto Serif SC',serif; }
   .memory-label{ font-family:'Noto Serif SC',serif; font-weight:700; font-size:13px; letter-spacing:2px; color:var(--ink-soft); margin-bottom:6px; }
   .diary-list{ border:1.5px solid var(--ink); background:var(--paper); box-shadow: var(--card-shadow); }
   .diary-list-item{ display:flex; align-items:center; gap:10px; padding:13px 14px; cursor:pointer; font-size:13.5px; transition:background .12s; }
@@ -292,19 +304,25 @@
   .chat-head .info{ flex:1; min-width:0; }
   .chat-head .cname{ font-family:'Noto Serif SC',serif; font-weight:700; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .chat-head .cstat{ font-size:11px; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  .chat-msgs{ flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:8px; }
-  .msg{ max-width:75%; padding:8px 12px; font-size:13.5px; line-height:1.5; position:relative; box-shadow:0 2px 5px -2px rgba(42,36,31,0.18); }
-.msg.bot{ 
-  align-self:flex-start; 
-  background:var(--paper-2); 
-  border:1px solid var(--rule); 
+  .chat-msgs{ flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; }
+  .msg-row{ display:flex; align-items:flex-end; gap:6px; max-width:82%; }
+  .msg-row.bot{ align-self:flex-start; flex-direction:row; }
+  .msg-row.user{ align-self:flex-end; flex-direction:row-reverse; }
+  .msg-avatar{
+    width:30px;height:30px;border-radius:50%; overflow:hidden; flex-shrink:0;
+    background:var(--paper-2); border:1px solid var(--ink); display:flex;align-items:center;justify-content:center; font-size:14px;
+  }
+  .msg-avatar img{ width:100%; height:100%; object-fit:cover; }
+  .msg{ max-width:100%; padding:8px 12px; font-size:13.5px; line-height:1.5; position:relative; box-shadow:0 2px 5px -2px rgba(42,36,31,0.18); }
+.msg.bot{
+  background:var(--paper-2);
+  border:1px solid var(--rule);
   border-radius:18px 18px 18px 4px; /* 更圆润的气泡形状 */
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
-.msg.user{ 
-  align-self:flex-end; 
-  background:linear-gradient(160deg,#B0404C,var(--rouge)); 
-  color:#fff; 
+.msg.user{
+  background:linear-gradient(160deg,#B0404C,var(--rouge));
+  color:#fff;
   border-radius:18px 18px 4px 18px; /* 更圆润 */
   box-shadow:0 2px 8px rgba(188, 40, 76, 0.4);
 }
@@ -445,6 +463,14 @@
 
     <div class="love-row">❤️ <span class="love-word">LOVE</span> <span class="bond-pct" id="bondPctText">100%</span></div>
 
+    <div class="anniv-row">
+      <div class="anniv-avatars">
+        <div class="anniv-avatar theirs" id="annivTheirAvatar" onclick="document.getElementById('avatarFileInput').click()">🌙</div>
+        <div class="anniv-avatar mine" id="annivMyAvatar" onclick="document.getElementById('myAvatarFileInput').click()">🙂</div>
+      </div>
+      <div class="anniv-text" onclick="editAnniversaryDate()">在一起 <b id="annivDaysText">0</b> 天</div>
+    </div>
+
     <div class="diary-divider-line"></div>
 
     <div class="memory-label">🎞 memory</div>
@@ -517,7 +543,7 @@
     </div>
     <div class="chat-wrap">
       <div class="chat-head">
-        <div class="avatar" style="width:36px;height:36px;font-size:16px;">🌙</div>
+        <div class="avatar" id="chatAvatarBox" style="width:36px;height:36px;font-size:16px;">🌙</div>
         <div class="info">
           <div class="cname" id="chatCName">陆沉</div>
           <div class="cstat" id="chatCStat">在线</div>
@@ -675,6 +701,23 @@
       <div class="switch-row"><span>深色模式</span><div class="switch" id="darkSwitch" onclick="toggleDark()"><div class="dot"></div></div></div>
       <div class="btn-row" style="margin-top:12px;"><div class="btn outline" onclick="resetAppearance()">恢复默认外观</div></div>
     </div>
+    <div class="box">
+      <div class="box-title">字体</div>
+      <div class="btn-row">
+        <div class="btn outline" onclick="setBodyFont('sans')">圆体（默认）</div>
+        <div class="btn outline" onclick="setBodyFont('serif')">衬线体</div>
+        <div class="btn outline" onclick="setBodyFont('hand')">手写体</div>
+      </div>
+    </div>
+    <div class="box">
+      <div class="box-title">气泡自定义 CSS</div>
+      <p style="font-size:12px;color:var(--ink-soft);margin:0 0 8px;">可以粘贴气泡皮肤的 CSS 代码，会自动套用到聊天气泡上（气泡对应的 class 是 .message-received 和 .message-sent，跟很多现成的皮肤代码是通用的）。</p>
+      <textarea id="bubbleCssInput" placeholder="粘贴 CSS 代码…" style="min-height:120px;font-family:monospace;font-size:11px;"></textarea>
+      <div class="btn-row">
+        <div class="btn" onclick="applyCustomBubbleCSS()">应用</div>
+        <div class="btn outline" onclick="clearCustomBubbleCSS()">恢复默认气泡</div>
+      </div>
+    </div>
   </section>
 
   <!-- ============ MOMENTS 朋友圈 ============ -->
@@ -719,35 +762,118 @@
 <div id="overlayRoot"></div>
 
 <script>
+/* ================= IndexedDB ================= */
+
+const DB_NAME = "EVAN_DB";
+const STORE_NAME = "kv";
+
+let _db = null;
+
+async function openDB(){
+    if(_db) return _db;
+
+    return new Promise((resolve,reject)=>{
+        const req = indexedDB.open(DB_NAME,1);
+
+        req.onupgradeneeded = ()=>{
+            const db=req.result;
+            if(!db.objectStoreNames.contains(STORE_NAME)){
+                db.createObjectStore(STORE_NAME);
+            }
+        };
+
+        req.onsuccess=()=>{
+            _db=req.result;
+            resolve(_db);
+        };
+
+        req.onerror=()=>reject(req.error);
+    });
+}
+
+async function idbGet(key){
+    const db=await openDB();
+
+    return new Promise((resolve,reject)=>{
+        const tx=db.transaction(STORE_NAME,"readonly");
+        const store=tx.objectStore(STORE_NAME);
+
+        const req=store.get(key);
+
+        req.onsuccess=()=>resolve(req.result);
+
+        req.onerror=()=>reject(req.error);
+    });
+}
+
+async function idbSet(key,value){
+    const db=await openDB();
+
+    return new Promise((resolve,reject)=>{
+        const tx=db.transaction(STORE_NAME,"readwrite");
+        const store=tx.objectStore(STORE_NAME);
+
+        store.put(value,key);
+
+        tx.oncomplete=()=>resolve();
+
+        tx.onerror=()=>reject(tx.error);
+    });
+}
+
 /* ============================================================
    STORAGE HELPERS
    ============================================================ */
-let storageBroken = false;
+let storageFailCount = 0;
 function hasCloudStorage(){ return typeof window.storage !== 'undefined' && window.storage !== null; }
 async function sGet(key, fallback){
-  if(hasCloudStorage() && !storageBroken){
+  if(hasCloudStorage()){
     try{
       const r = await window.storage.get(key, false);
       if(r) return JSON.parse(r.value);
-    }catch(e){ /* 忽略，往下走浏览器本地存储 */ }
+    }catch(e){ /* 云端这次读取失败，往下走本地兜底 */ }
   }
-  try{
-    const raw = localStorage.getItem('EVAN:'+key);
-    if(raw !== null) return JSON.parse(raw);
-  }catch(e){ /* 浏览器本地存储也不可用（比如无痕模式） */ }
-  return fallback;
+
+try{
+    const raw = await idbGet('EVAN:'+key);
+    if(raw !== undefined && raw !== null){
+        return JSON.parse(raw);
+    }
+}catch(e){
+    // IndexedDB 失败，再尝试 localStorage
+    try{
+        const raw = localStorage.getItem('EVAN:'+key);
+        if(raw !== null) return JSON.parse(raw);
+    }catch(e){}
+}  return fallback;
 }
 async function sSet(key, obj){
-  let ok = false;
-  if(hasCloudStorage() && !storageBroken){
-    try{ await window.storage.set(key, JSON.stringify(obj), false); ok = true; }
-    catch(e){ storageBroken = true; console.warn('cloud storage unavailable, falling back to browser storage'); }
+  let cloudOk = false;
+  if(hasCloudStorage()){
+    try{
+      await window.storage.set(key, JSON.stringify(obj), false);
+      cloudOk = true;
+      storageFailCount = 0;
+    }catch(e){
+      storageFailCount++;
+      console.warn('cloud storage set failed (第'+storageFailCount+'次)', key, e);
+    }
   }
-  try{
+  if(!cloudOk){
+    // 云端这次没存上（不代表以后也存不上，下次还会再试），先落到本地兜底
+    try{
+    await idbSet('EVAN:'+key, JSON.stringify(obj));
+
+    // 再写一份到 localStorage，作为最后一道保险
     localStorage.setItem('EVAN:'+key, JSON.stringify(obj));
-    ok = true;
-  }catch(e){ console.warn('localStorage set failed', key, e); }
-  setSaveStatus(ok ? 'saved' : 'error');
+
+    setSaveStatus('saved');
+}catch(e){
+    console.warn('IndexedDB/localStorage 保存失败', key, e);
+    setSaveStatus('error');
+}    return;
+  }
+  setSaveStatus('saved');
 }
 let _saveToastTimer = null;
 function setSaveStatus(state){
@@ -770,7 +896,7 @@ function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toStrin
 /* ============================================================
    STATE
    ============================================================ */
-let profile = { name:'陆沉', status:'Status: 跌入你的宇宙 ☆°｡', avatar:'🌙', photo:null, myName:'我', myAvatar:'🙂', myBio:'', momentsCover:null };
+let profile = { name:'陆沉', status:'Status: 跌入你的宇宙 ☆°｡', avatar:'🌙', photo:null, myName:'我', myAvatar:'🙂', myBio:'', momentsCover:null, anniversaryDate:null };
 let chatSettings = { companionName:'陆沉', delayMin:1, delayMax:5, readNoReply:false, background:null, stickers:[
   {id:'e1', type:'emoji', value:'🌙'}, {id:'e2', type:'emoji', value:'☕'}, {id:'e3', type:'emoji', value:'📖'}
 ]};
@@ -796,11 +922,17 @@ let lifePhotos = [];
 let statusPool = [];
 let todayStatus = null;
 let currentView = 'home';
-let themeSettings = { accent:'#9C2F3B', paperStyle:'grid', paperColor:'cream', dark:false };
+let themeSettings = { accent:'#9C2F3B', paperStyle:'grid', paperColor:'cream', dark:false, bodyFont:'sans' };
+let customBubbleCSS = '';
 let pendingReplyTimer = null;
 let lastGroupUsed = null, lastCardUsed = {};
 
 const ACCENTS = ['#9C2F3B','#B08A2E','#3B6B5E','#4C5B8A','#7A4E8C','#2A241F'];
+const FONT_MAP = {
+  sans: "'Noto Sans SC', sans-serif",
+  serif: "'Noto Serif SC', serif",
+  hand: "'Ma Shan Zheng', cursive"
+};
 const PAPER_PRESETS = {
   cream:    { paper:'#F3EEE3', paper2:'#EBE4D5' },
   blush:    { paper:'#F7E9E6', paper2:'#F0DAD5' },
@@ -848,8 +980,10 @@ async function init(){
   todayStatus = await sGet('today-status', null);
   ensureTodayStatus();
   themeSettings = await sGet('theme-settings', themeSettings);
+  customBubbleCSS = await sGet('custom-bubble-css', '');
 
   applyTheme();
+  applyCustomBubbleCSSToPage();
   renderHomeProfile();
   renderChat();
   renderCardsView();
@@ -919,7 +1053,42 @@ function renderHomeProfile(){
   if(ph) ph.innerHTML = profile.photo ? `<img src="${profile.photo}">` : '点击上传';
   document.getElementById('chatCName').textContent = chatSettings.companionName;
   document.getElementById('chatTitle').textContent = '传讯 · '+chatSettings.companionName;
+  const chatAvatarEl = document.getElementById('chatAvatarBox');
+  if(chatAvatarEl) chatAvatarEl.innerHTML = profile.avatar && profile.avatar.startsWith('data:') ? `<img src="${profile.avatar}">` : (profile.avatar||'🌙');
   renderMomentsHeader();
+  renderAnniversary();
+}
+/* ---- 纪念日：头像跟朋友圈/传讯用的是同一份数据，改一处三处都会同步 ---- */
+function renderAnniversary(){
+  const mineEl = document.getElementById('annivMyAvatar');
+  if(mineEl) mineEl.innerHTML = profile.myAvatar && profile.myAvatar.startsWith('data:') ? `<img src="${profile.myAvatar}">` : (profile.myAvatar||'🙂');
+  const theirEl = document.getElementById('annivTheirAvatar');
+  if(theirEl) theirEl.innerHTML = profile.avatar && profile.avatar.startsWith('data:') ? `<img src="${profile.avatar}">` : (profile.avatar||'🌙');
+  const daysEl = document.getElementById('annivDaysText');
+  if(!daysEl) return;
+  if(!profile.anniversaryDate){ daysEl.textContent = '？'; return; }
+  const start = new Date(profile.anniversaryDate+'T00:00:00');
+  const now = new Date();
+  const startMid = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const nowMid = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.floor((nowMid - startMid) / 86400000) + 1;
+  daysEl.textContent = days > 0 ? days : '？';
+}
+async function editAnniversaryDate(){
+  openOverlay(`
+    <div class="drawer-head"><h3>设置纪念日</h3><span class="close-x" onclick="closeOverlay()">✕</span></div>
+    <label class="field">从哪天开始算"在一起"</label>
+    <input type="date" id="annivDateInput" value="${profile.anniversaryDate||''}">
+    <div class="btn-row"><div class="btn" onclick="saveAnniversaryDate()">保存</div></div>
+  `);
+}
+async function saveAnniversaryDate(){
+  const val = document.getElementById('annivDateInput').value;
+  if(!val) return;
+  profile.anniversaryDate = val;
+  await sSet('profile', profile);
+  renderAnniversary();
+  closeOverlay();
 }
 function editPolaroidCaption(){
   const val = prompt('修改这句话', profile.status || '');
@@ -972,6 +1141,7 @@ function onMyAvatarFile(e){
     await sSet('profile', profile);
     renderMomentsHeader();
     renderMoments();
+    renderAnniversary();
   };
   reader.readAsDataURL(f);
 }
@@ -1387,6 +1557,8 @@ function renderChat(){
     wrap.innerHTML = '<div class="empty-note">还没有聊天记录，说点什么吧～</div>';
     return;
   }
+  const botAvatar = profile.avatar && profile.avatar.startsWith('data:') ? `<img src="${profile.avatar}">` : (profile.avatar||'🌙');
+  const myAvatar = profile.myAvatar && profile.myAvatar.startsWith('data:') ? `<img src="${profile.myAvatar}">` : (profile.myAvatar||'🙂');
   wrap.innerHTML = chatMessages.map(m=>{
     const time = formatMsgTime(m.time);
     if(m.type==='pat' || m.type==='gesture'){
@@ -1395,25 +1567,28 @@ function renderChat(){
     const quoteRefHtml = m.quoteOf
       ? `<div class="quote-ref">${m.quoteOf.from==='user'?(profile.myName||'我'):chatSettings.companionName}: ${m.quoteOf.preview}</div>` : '';
     const quoteBtn = `<span class="quote-trigger" onclick="setQuoteTarget('${m.id}')">↩引用</span>`;
+    const avatarHtml = `<div class="msg-avatar">${m.from==='user'?myAvatar:botAvatar}</div>`;
+    let bubbleHtml;
     if(m.type==='sticker'){
       const val = m.content.startsWith('data:') ? `<img src="${m.content}">` : m.content;
-      return `<div class="msg sticker ${m.from}">${quoteRefHtml}${val}<div class="t" style="text-align:${m.from==='user'?'right':'left'};">${time}${quoteBtn}</div></div>`;
-    }
-    if(m.type==='image'){
-      return `<div class="msg image ${m.from}">${quoteRefHtml}<img class="chat-image" src="${m.content}" onclick="viewChatImage('${m.id}')"><div class="t" style="text-align:${m.from==='user'?'right':'left'};">${time}${(m.from==='user'&&m.read)?' · 已读':''}${quoteBtn}</div></div>`;
-    }
-    if(m.type==='redpacket'){
+      bubbleHtml = `<div class="msg sticker ${m.from}">${quoteRefHtml}${val}<div class="t" style="text-align:${m.from==='user'?'right':'left'};">${time}${quoteBtn}</div></div>`;
+    } else if(m.type==='image'){
+      bubbleHtml = `<div class="msg image ${m.from}">${quoteRefHtml}<img class="chat-image" src="${m.content}" onclick="viewChatImage('${m.id}')"><div class="t" style="text-align:${m.from==='user'?'right':'left'};">${time}${(m.from==='user'&&m.read)?' · 已读':''}${quoteBtn}</div></div>`;
+    } else if(m.type==='redpacket'){
       const revealed = m.from==='user' || m.opened;
       const tapAttr = revealed ? '' : `onclick="openRedPacket('${m.id}')"`;
-      return `<div class="msg redpacket ${m.from}" ${tapAttr}>
+      bubbleHtml = `<div class="msg redpacket ${m.from}" ${tapAttr}>
         ${quoteRefHtml}
         <div class="rp-top">🧧 ${m.note||'红包'}</div>
         ${revealed ? `<div class="rp-amount">¥${Number(m.amount).toFixed(2)}</div>` : `<div class="rp-tap">点击查收</div>`}
         <div class="t" style="color:rgba(255,255,255,0.75);">${time}${quoteBtn}</div>
       </div>`;
+    } else {
+      const readTag = (m.from==='user' && m.read) ? ' · 已读' : '';
+      const skinClass = m.from==='user' ? 'message message-sent' : 'message message-received';
+      bubbleHtml = `<div class="msg ${m.from} ${skinClass}">${quoteRefHtml}${m.content}<div class="t">${time}${readTag}${quoteBtn}</div></div>`;
     }
-    const readTag = (m.from==='user' && m.read) ? ' · 已读' : '';
-    return `<div class="msg ${m.from}">${quoteRefHtml}${m.content}<div class="t">${time}${readTag}${quoteBtn}</div></div>`;
+    return `<div class="msg-row ${m.from}">${avatarHtml}${bubbleHtml}</div>`;
   }).join('');
   scrollChatBottom();
 }
@@ -1666,7 +1841,7 @@ function triggerProactiveMessage(){
         renderUnreadDots(); 
       }
     }
-  }, 1200 + Math.random()*800);
+  }, getReplyDelayMs());
 }async function sendProactiveLetter(){
   const lineCount = 2 + Math.floor(Math.random()*3);
   const lines = [];
@@ -2393,7 +2568,7 @@ async function saveProfile(){
 }
 async function resetAll(){
   if(!confirm('确定要清空全部数据吗？这个操作无法撤销。')) return;
-  const keys = ['profile','chat-settings','chat-messages','cards-data','ledger-entries','period-entries','diary-entries','recipe-entries','theme-settings','moments-posts','letters','inbox-letters','call-logs','proactive-state','chat-unread','letter-unread','inbox-letter-unread','moments-unread','life-photos','status-pool','today-status'];
+  const keys = ['profile','chat-settings','chat-messages','cards-data','ledger-entries','period-entries','diary-entries','recipe-entries','theme-settings','moments-posts','letters','inbox-letters','call-logs','proactive-state','chat-unread','letter-unread','inbox-letter-unread','moments-unread','life-photos','status-pool','today-status','custom-bubble-css'];
   for(const k of keys){
     try{ if(hasCloudStorage()) await window.storage.delete(k, false); }catch(e){}
     try{ localStorage.removeItem('EVAN:'+k); }catch(e){}
@@ -2406,7 +2581,7 @@ function exportBackup(){
   const data = {
     profile, chatSettings, chatMessages, cardsData, ledgerEntries, periodEntries,
     diaryEntries, recipeEntries, momentsPosts, letters, inboxLetters, callLogs, themeSettings, proactiveState,
-    lifePhotos, statusPool, todayStatus,
+    lifePhotos, statusPool, todayStatus, customBubbleCSS,
     exportedAt: Date.now()
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
@@ -2444,6 +2619,7 @@ function onImportBackupFile(e){
     lifePhotos = data.lifePhotos || [];
     statusPool = data.statusPool || [];
     todayStatus = data.todayStatus || null;
+    customBubbleCSS = data.customBubbleCSS || '';
     await sSet('profile', profile);
     await sSet('chat-settings', chatSettings);
     await sSet('chat-messages', chatMessages);
@@ -2461,7 +2637,9 @@ function onImportBackupFile(e){
     await sSet('life-photos', lifePhotos);
     await sSet('status-pool', statusPool);
     await sSet('today-status', todayStatus);
+    await sSet('custom-bubble-css', customBubbleCSS);
     applyTheme();
+    applyCustomBubbleCSSToPage();
     renderHomeProfile(); renderChat(); renderCardsView(); renderLedger(); renderPeriod();
     renderRecipes(); renderDiary(); renderBeautify(); renderMoments(); renderLetters();
     renderInboxLetters(); renderCallLog(); renderLifePhotos(); renderTodayStatusHome();
@@ -2484,6 +2662,8 @@ function renderBeautify(){
     ).join('');
   }
   document.getElementById('darkSwitch').classList.toggle('on', !!themeSettings.dark);
+  const cssInput = document.getElementById('bubbleCssInput');
+  if(cssInput) cssInput.value = customBubbleCSS || '';
 }
 async function setAccent(c){
   themeSettings.accent = c; await sSet('theme-settings', themeSettings); applyTheme();
@@ -2494,18 +2674,24 @@ async function setPaperColor(key){
 async function setPaperStyle(style){
   themeSettings.paperStyle = style; await sSet('theme-settings', themeSettings); applyTheme();
 }
+async function setBodyFont(key){
+  themeSettings.bodyFont = key; await sSet('theme-settings', themeSettings); applyTheme();
+}
 async function toggleDark(){
   themeSettings.dark = !themeSettings.dark;
   await sSet('theme-settings', themeSettings); applyTheme(); renderBeautify();
 }
 async function resetAppearance(){
-  themeSettings = { accent:'#9C2F3B', paperStyle:'grid', paperColor:'cream', dark:false };
+  themeSettings = { accent:'#9C2F3B', paperStyle:'grid', paperColor:'cream', dark:false, bodyFont:'sans' };
+  customBubbleCSS = '';
   await sSet('theme-settings', themeSettings);
-  applyTheme(); renderBeautify();
+  await sSet('custom-bubble-css', customBubbleCSS);
+  applyTheme(); applyCustomBubbleCSSToPage(); renderBeautify();
 }
 function applyTheme(){
   document.documentElement.style.setProperty('--rouge', themeSettings.accent);
   document.documentElement.style.setProperty('--rouge-deep', themeSettings.accent);
+  document.documentElement.style.setProperty('--font-body', FONT_MAP[themeSettings.bodyFont] || FONT_MAP.sans);
   if(!themeSettings.dark){
     const preset = PAPER_PRESETS[themeSettings.paperColor] || PAPER_PRESETS.cream;
     document.documentElement.style.setProperty('--paper', preset.paper);
@@ -2519,6 +2705,30 @@ function applyTheme(){
   if(themeSettings.paperStyle==='dot') document.body.classList.add('paper-dot');
   document.body.setAttribute('data-dark', themeSettings.dark ? '1':'0');
   applyChatBackground();
+}
+
+/* ---- 气泡自定义 CSS：粘贴现成皮肤代码，自动套用到 .message-received / .message-sent ---- */
+async function applyCustomBubbleCSS(){
+  const val = document.getElementById('bubbleCssInput').value;
+  customBubbleCSS = val;
+  await sSet('custom-bubble-css', customBubbleCSS);
+  applyCustomBubbleCSSToPage();
+}
+async function clearCustomBubbleCSS(){
+  customBubbleCSS = '';
+  const el = document.getElementById('bubbleCssInput');
+  if(el) el.value = '';
+  await sSet('custom-bubble-css', customBubbleCSS);
+  applyCustomBubbleCSSToPage();
+}
+function applyCustomBubbleCSSToPage(){
+  let styleEl = document.getElementById('customBubbleStyleTag');
+  if(!styleEl){
+    styleEl = document.createElement('style');
+    styleEl.id = 'customBubbleStyleTag';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = customBubbleCSS || '';
 }
 
 /* ============================================================
