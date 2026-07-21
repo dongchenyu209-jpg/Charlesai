@@ -890,15 +890,22 @@ function setSaveStatus(state){
   const el = document.getElementById('saveToast');
   if(!el) return;
   clearTimeout(_saveToastTimer);
+
   if(state==='saved'){
-    el.textContent = '✓ 已自动保存';
+    el.textContent = '已自动保存';
     el.classList.remove('warn');
     el.classList.add('show');
-    _saveToastTimer = setTimeout(()=>{ el.classList.remove('show'); }, 1100);
-  } else if(state==='error'){
-    el.textContent = '⚠ 当前浏览器禁止了本地存储，建议去"设置"里导出备份';
+    _saveToastTimer = setTimeout(()=>{ 
+      el.classList.remove('show'); 
+    }, 1100);
+  } 
+  else if(state==='error'){
+    el.textContent = '存储暂时波动，建议偶尔导出备份';
     el.classList.add('warn');
-    el.classList.add('show'); // 持续显示，提醒改用手动备份
+    el.classList.add('show');
+    _saveToastTimer = setTimeout(()=>{ 
+      el.classList.remove('show'); 
+    }, 2000);
   }
 }
 function uid(){ return Math.random().toString(36).slice(2,10)+Date.now().toString(36); }
@@ -1163,17 +1170,21 @@ function onLifePhotoFile(e){
   const files = Array.from(e.target.files || []);
   if(files.length===0) return;
   let remaining = files.length;
+
   files.forEach(f=>{
     const reader = new FileReader();
-    reader.onload = async ()=>{
-      lifePhotos.unshift({ id:uid(), src:reader.result });
+    reader.onload = async (ev) => {
+      const compressed = await compressImage(ev.target.result, 800); // 压缩处理
+      lifePhotos.unshift({ id:uid(), src: compressed });
       remaining--;
-      if(remaining===0){ await sSet('life-photos', lifePhotos); renderLifePhotos(); }
+      if(remaining===0){ 
+        await sSet('life-photos', lifePhotos); 
+        renderLifePhotos(); 
+      }
     };
     reader.readAsDataURL(f);
   });
-}
-async function deleteLifePhoto(id){
+}async function deleteLifePhoto(id){
   lifePhotos = lifePhotos.filter(p=>p.id!==id);
   await sSet('life-photos', lifePhotos);
   renderLifePhotos();
@@ -1185,7 +1196,31 @@ function renderLifePhotos(){
     `<div class="ph-item"><img src="${p.src}"><div class="del" onclick="deleteLifePhoto('${p.id}')">✕</div></div>`
   ).join('') : '<div class="empty-note">还没有照片，点下面加一张吧</div>';
 }
-
+// ==================== 图片压缩函数 ====================
+async function compressImage(dataUrl, maxWidth = 800) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      
+      if (width > maxWidth) {
+        height = Math.round(height * maxWidth / width);
+        width = maxWidth;
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.src = dataUrl;
+  });
+}
+// ==================== 结束 ====================
 /* ============================================================
    今日状态：自由导入一批状态，每天自动帮你挑一个显示
    ============================================================ */
@@ -1277,10 +1312,14 @@ async function rerollTodayStatus(){
 function onPhotoUpload(e){
   const f = e.target.files[0]; if(!f) return;
   const reader = new FileReader();
-  reader.onload = async ()=>{ profile.photo = reader.result; await sSet('profile', profile); renderHomeProfile(); };
+  reader.onload = async (ev) => {
+    const compressed = await compressImage(ev.target.result, 1000);
+    profile.photo = compressed;
+    await sSet('profile', profile); 
+    renderHomeProfile(); 
+  };
   reader.readAsDataURL(f);
-}
-function onAvatarFile(e){
+}function onAvatarFile(e){
   const f = e.target.files[0]; if(!f) return;
   const reader = new FileReader();
   reader.onload = async ()=>{
