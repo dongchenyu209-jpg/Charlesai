@@ -861,17 +861,27 @@ async function sSet(key, obj){
   }
   if(!cloudOk){
     // 云端这次没存上（不代表以后也存不上，下次还会再试），先落到本地兜底
-    try{
+    let idbOk = false;
+
+try{
     await idbSet('EVAN:'+key, JSON.stringify(obj));
-
-    // 再写一份到 localStorage，作为最后一道保险
-    localStorage.setItem('EVAN:'+key, JSON.stringify(obj));
-
-    setSaveStatus('saved');
+    idbOk = true;
 }catch(e){
-    console.warn('IndexedDB/localStorage 保存失败', key, e);
+    console.warn("IndexedDB 保存失败", e);
+}
+
+try{
+    localStorage.setItem('EVAN:'+key, JSON.stringify(obj));
+}catch(e){
+    console.warn("localStorage 保存失败", e);
+}
+
+if(idbOk){
+    setSaveStatus('saved');
+}else{
     setSaveStatus('error');
-}    return;
+}
+return;
   }
   setSaveStatus('saved');
 }
