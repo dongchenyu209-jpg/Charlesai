@@ -722,7 +722,7 @@
 
     <div class="checkin-box">
       <div class="checkin-btn" id="petCheckinBtn" onclick="claimPetCheckin()">今日打卡</div>
-      <div class="checkin-hint">任务全勾后可打卡 · 开心+8 好感+4 · 随机饲料×1</div>
+      <div class="checkin-hint">勾任务领小食品 · 打卡：开心+8 好感+6 成长+14（仅打卡加成长；漏打卡会昏倒）</div>
     </div>
   </section>
 
@@ -1711,7 +1711,7 @@ async function rerollTodayStatus(){
 
 /* ============================================================
    养成小宠物：可以同时养好几只扁平可爱风的小动物。
-   设定每天要做的任务 → 打勾完成 → 打卡领随机饲料 → 喂食攒成长值长大。
+   设定每天任务 → 打勾领随机小食品 → 喂食回饱食 → 打卡加成长与好感。
    还可以摸摸头、贴贴、清洁，饱食度/开心值/好感度会随互动和时间变化。
    ============================================================ */
 const PET_ANIMALS = {
@@ -1726,10 +1726,22 @@ const PET_MAX_STAGE = 5;
 const PET_GROWTH_PER_STAGE = 100;
 const PET_STAGE_SIZES = [70, 64, 74, 86, 98, 112];
 const PET_FOODS = {
-  common: { label:'普通饲料', emoji:'🌾', growth:14, fill:18, weight:60 },
-  yummy:  { label:'精选饲料', emoji:'🍖', growth:22, fill:28, weight:30 },
-  rare:   { label:'稀有饲料', emoji:'🍰', growth:35, fill:40, weight:10 },
+  cookie:   { label:'小饼干',   emoji:'🍪', growth:12, fill:15, weight:22 },
+  candy:    { label:'水果糖',   emoji:'🍬', growth:11, fill:12, weight:18 },
+  milk:     { label:'鲜牛奶',   emoji:'🥛', growth:14, fill:20, weight:16 },
+  fish:     { label:'小鱼干',   emoji:'🐟', growth:16, fill:22, weight:12 },
+  berry:    { label:'浆果杯',   emoji:'🫐', growth:15, fill:18, weight:12 },
+  dumpling: { label:'小笼包',   emoji:'🥟', growth:18, fill:24, weight:8 },
+  pudding:  { label:'牛奶布丁', emoji:'🍮', growth:20, fill:22, weight:6 },
+  cake:     { label:'草莓蛋糕', emoji:'🍰', growth:28, fill:30, weight:4 },
+  honey:    { label:'蜂蜜罐',   emoji:'🍯', growth:32, fill:28, weight:2 },
 };
+// 兼容旧存档里的 common / yummy / rare
+const PET_FOOD_LEGACY = { common:'cookie', yummy:'dumpling', rare:'cake' };
+function resolveFoodKey(key){
+  if(PET_FOODS[key]) return key;
+  return PET_FOOD_LEGACY[key] || 'cookie';
+}
 /* 形态：蛋 → 幼体 → … → 成体 emoji（和系统表情一致） */
 const PET_FORMS = {
   cat:    ['🥚','🐱','😺','😸','🐈','🐈'],
@@ -1895,6 +1907,9 @@ function normalizePetLevel(pet){
     if(!Array.isArray(pet.adventures)) pet.adventures = [];
     if(!Array.isArray(pet.careLog)) pet.careLog = [];
     if(pet.outing === undefined) pet.outing = null;
+    if(pet.fainted === undefined) pet.fainted = false;
+    if(pet.missCheckinDays === undefined) pet.missCheckinDays = 0;
+    if(pet.dead === undefined) pet.dead = false;
     return;
   }
   if(pet.stage === 0 || (!pet.stage && !(pet.growth>0))){ pet.level = 0; pet.growth = pet.growth||0; }
@@ -1906,6 +1921,9 @@ function normalizePetLevel(pet){
   if(!Array.isArray(pet.adventures)) pet.adventures = [];
   if(!Array.isArray(pet.careLog)) pet.careLog = [];
   if(pet.outing === undefined) pet.outing = null;
+  if(pet.fainted === undefined) pet.fainted = false;
+  if(pet.missCheckinDays === undefined) pet.missCheckinDays = 0;
+  if(pet.dead === undefined) pet.dead = false;
 }
 function tryPetLevelUp(pet){
   if(!pet) return false;
@@ -1926,7 +1944,7 @@ function pickRandomFood(){
   const total = Object.values(PET_FOODS).reduce((s,f)=>s+f.weight,0);
   let r = Math.random()*total;
   for(const key in PET_FOODS){ const f = PET_FOODS[key]; if(r<f.weight) return key; r -= f.weight; }
-  return 'common';
+  return 'cookie';
 }
 function daysBetween(a,b){
   const d1 = new Date(a+'T00:00:00'), d2 = new Date(b+'T00:00:00');
@@ -1967,6 +1985,15 @@ async function migratePetStateIfNeeded(){
   }
   if(!petState.pets) petState.pets = [];
   if(!petState.foodInventory) petState.foodInventory = {};
+  // 旧饲料名迁移到小食品
+  const inv = petState.foodInventory;
+  Object.keys(PET_FOOD_LEGACY).forEach(oldKey=>{
+    if(inv[oldKey]){
+      const nk = PET_FOOD_LEGACY[oldKey];
+      inv[nk] = (inv[nk]||0) + inv[oldKey];
+      delete inv[oldKey];
+    }
+  });
 }
 
 function renderPetPickGrid(){
@@ -1996,7 +2023,8 @@ async function confirmPetChoice(){
     growth: 0, stage: 0, level: 0,
     hunger: 30, happiness: 0, favor: 0,
     cleanDate: today, bathLeft: 3, cuddleLeft: 3,
-    bornDate: today, adventures: [], outing: null, careLog: []
+    bornDate: today, adventures: [], outing: null, careLog: [],
+    fainted: false, missCheckinDays: 0, dead: false
   };
   if(!petState.pets) petState.pets = [];
   petState.pets.push(fresh);
@@ -2027,12 +2055,29 @@ async function evaluatePetDays(){
   if(!petState.pets || !petState.pets.length) return;
   const today = todayKey();
   const days = petState.lastOpenDate ? Math.max(0, daysBetween(petState.lastOpenDate, today)) : 0;
+  const lastCheck = petState.lastCheckinDate || null;
   petState.pets.forEach(pet=>{
+    normalizePetLevel(pet);
+    if(pet.dead) return;
     if(days>0){
-      let hungerDrop = 0;
-      for(let i=0;i<days;i++){ hungerDrop += 5 + Math.random()*5; }
-      pet.hunger = Math.max(0, (pet.hunger??30) - hungerDrop);
       pet.happiness = Math.max(0, (pet.happiness??0) - 25*days);
+      // 每天刷新饱食度底线，喂食可再拉高
+      pet.hunger = Math.min(100, Math.max(40, (pet.hunger??40)));
+    }
+    // 孵化后的宠物：按「上次打卡」判断有没有漏天
+    if(pet.level > 0 && lastCheck !== today){
+      // 从未打卡：以出生日/上次打开推算
+      const ref = lastCheck || pet.bornDate || petState.lastOpenDate || today;
+      const gap = daysBetween(ref, today); // 距今天数
+      // gap>=1：至少隔了一整天没打卡 → 昏倒；累计缺口
+      if(gap >= 1){
+        pet.fainted = true;
+        pet.missCheckinDays = Math.max(pet.missCheckinDays||0, gap);
+      }
+      if((pet.missCheckinDays||0) >= 2){
+        pet.dead = true;
+        pet.fainted = false;
+      }
     }
     if(pet.cleanDate !== today){
       pet.cleanDate = today; pet.bathLeft = 3; pet.cuddleLeft = 3;
@@ -2053,7 +2098,23 @@ async function togglePetTask(id){
   if(!t) return;
   const today = todayKey();
   if(!t.doneDates) t.doneDates = {};
-  t.doneDates[today] = !t.doneDates[today];
+  if(!t.rewardedDates) t.rewardedDates = {};
+  const wasDone = !!t.doneDates[today];
+  // 今天已经领过奖励：不允许靠取消再勾刷食品
+  if(wasDone && t.rewardedDates[today]){
+    showPetToast('这任务今天已经领过小食品啦，明天再来～');
+    return;
+  }
+  t.doneDates[today] = !wasDone;
+  if(!wasDone && t.doneDates[today] && !t.rewardedDates[today]){
+    if(!petState.foodInventory) petState.foodInventory = {};
+    const foodKey = pickRandomFood();
+    petState.foodInventory[foodKey] = (petState.foodInventory[foodKey]||0) + 1;
+    t.rewardedDates[today] = true;
+    await sSet('pet-state', petState);
+    const f = PET_FOODS[foodKey];
+    showPetToast(`${f.emoji} 完成任务，获得${f.label} ×1`);
+  }
   await sSet('pet-tasks', petTasks);
   renderPetPanel();
 }
@@ -2077,27 +2138,36 @@ async function claimPetCheckin(){
   const today = todayKey();
   if(petState.lastCheckinDate===today){ showPetToast('今天已经打过卡啦，明天再来～'); return; }
   if(!petTasksAllDoneToday()){
-    showPetToast(!petTasks.length ? '先加几条每日任务并打勾，才能打卡领奖励哦' : '先把今天的每日任务都打勾完成呀～');
+    showPetToast(!petTasks.length ? '先加几条每日任务并打勾，才能打卡哦' : '先把今天的每日任务都打勾完成呀～');
     return;
   }
-  const foodKey = pickRandomFood();
-  petState.foodInventory[foodKey] = (petState.foodInventory[foodKey]||0)+1;
   const pet = getActivePet();
   if(pet){
+    normalizePetLevel(pet);
+    if(pet.dead){ showPetToast('已经回不来了……'); return; }
+    // 打卡：醒过来 + 好感/成长/开心
+    pet.fainted = false;
+    pet.missCheckinDays = 0;
     pet.happiness = Math.min(100, (pet.happiness||0)+8);
-    pet.favor = Math.min(100, (pet.favor||0)+4);
+    pet.favor = Math.min(100, (pet.favor||0)+6);
+    // 成长值只从打卡获得：每天+14，大约一个月可升到满级
+    if(pet.level > 0 && pet.level < PET_MAX_STAGE){
+      pet.growth = Math.min(100, (pet.growth||0)+14);
+    }
+    pet.hunger = Math.max(pet.hunger||0, 40);
     tryPetLevelUp(pet);
   }
   petState.lastCheckinDate = today;
   await sSet('pet-state', petState);
   renderPetPanel();
-  showPetToast(`🎉 打卡成功！${PET_FOODS[foodKey].emoji}${PET_FOODS[foodKey].label} · 开心+8 好感+4`);
+  showPetToast('🎉 打卡成功！开心+8 好感+6 成长+14');
 }
 
-/* ---- 喂食：消耗饲料换成长值，饲料是所有宠物共用的 ---- */
+/* ---- 喂食：消耗小食品回饱食（不增加成长；成长仅打卡） ---- */
 function openPetFeedSheet(){
   const pet = getActivePet(); if(!pet) return;
   normalizePetLevel(pet);
+  if(pet.dead){ showPetToast(`${pet.name} 已经离开了……`); return; }
   if(isPetOut(pet)){ showPetToast(`${pet.name} 还在外面，等回来再喂～`); return; }
   const rows = Object.keys(PET_FOODS).map(key=>{
     const f = PET_FOODS[key];
@@ -2107,28 +2177,29 @@ function openPetFeedSheet(){
       <div class="clean-icon">${f.emoji}</div>
       <div style="flex:1;">
         <div class="clean-title">${f.label} <span style="color:var(--ink-soft);font-weight:400;">x${count}</span></div>
-        <div class="clean-effect">成长+${f.growth} 饱食度+${f.fill} 开心+3 好感+1</div>
+        <div class="clean-effect">饱食度+${f.fill} 开心+3 好感+1</div>
       </div>
     </div>`;
   }).join('');
   openOverlay(`<div class="box-title">🍽 喂 ${pet.name}<span class="icon-btn" onclick="closeOverlay()">✕</span></div>
     ${rows}
-    <div class="empty-note" style="margin-top:6px;">每天打卡成功可以领到随机饲料，所有宠物共用饲料库存～</div>`);
+    <div class="empty-note" style="margin-top:6px;">完成每日任务可随机领小食品；喂食只回饱食，成长要靠打卡～</div>`);
 }
 async function feedPet(key){
   const pet = getActivePet(); if(!pet) return;
+  key = resolveFoodKey(key);
   const count = (petState.foodInventory && petState.foodInventory[key]) || 0;
   if(count<=0) return;
   const f = PET_FOODS[key];
+  if(!f) return;
   petState.foodInventory[key] = count-1;
   normalizePetLevel(pet);
   let hatched = false;
+  // 喂食只回饱食/开心/少许好感，不增加成长；蛋喂一次仍可破壳
   if(pet.level === 0){
     pet.level = 1; pet.stage = 1;
-    pet.growth = Math.min(100, f.growth);
+    pet.growth = 0;
     hatched = true;
-  } else if(pet.level < PET_MAX_STAGE){
-    pet.growth = Math.min(100, (pet.growth||0) + f.growth);
   }
   pet.stage = pet.level;
   pet.hunger = Math.min(100, (pet.hunger??30)+f.fill);
@@ -2139,13 +2210,14 @@ async function feedPet(key){
   renderPetPanel();
   closeOverlay();
   if(hatched) showPetToast(`🥚→${petFormEmoji(pet.animal,1)} 破壳啦！变成了${petFormLabel(pet.animal,1)}`);
-  else showPetToast(`🍚 ${pet.name} 吃得很开心！开心+3 好感+1`);
+  else showPetToast(`${f.emoji} ${pet.name} 吃掉了${f.label}！饱食+${f.fill} 开心+3 好感+1`);
 }
 
 /* ---- 摸摸头 / 贴贴 ---- */
 async function petTouchPet(){
   const pet = getActivePet(); if(!pet) return;
   normalizePetLevel(pet);
+  const block = petStatusBlock(pet); if(block){ showPetToast(block); return; }
   if(isPetOut(pet)){ showPetToast(`${pet.name} 还在外面～`); return; }
   if(!pet.level){ showPetToast('蛋还没孵化呢，先去喂点吃的吧～'); return; }
   pet.happiness = Math.min(100, (pet.happiness||0)+4);
@@ -2158,6 +2230,7 @@ async function petTouchPet(){
 async function petCuddlePet(){
   const pet = getActivePet(); if(!pet) return;
   normalizePetLevel(pet);
+  const block = petStatusBlock(pet); if(block){ showPetToast(block); return; }
   if(isPetOut(pet)){ showPetToast(`${pet.name} 还在外面～`); return; }
   if(!pet.level){ showPetToast('蛋还没孵化呢，先去喂点吃的吧～'); return; }
   if((pet.cuddleLeft??0)<=0){ showPetToast('今天已经贴贴很多次啦，明天再来～'); return; }
@@ -2179,7 +2252,7 @@ function openPetCleanSheet(){
   openOverlay(`<div class="box-title">🛁 清洁方式<span class="icon-btn" onclick="closeOverlay()">✕</span></div>
     <div class="clean-item" onclick="petCleanAction('wipe')"><div class="clean-icon">🧽</div><div style="flex:1;"><div class="clean-title">擦擦脸</div><div class="clean-effect">开心+4 好感+1</div></div></div>
     <div class="clean-item" onclick="petCleanAction('comb')"><div class="clean-icon">🪮</div><div style="flex:1;"><div class="clean-title">梳梳毛</div><div class="clean-effect">开心+6 好感+2</div></div></div>
-    <div class="clean-item ${bathLeft<=0?'disabled':''}" onclick="petCleanAction('bath')"><div class="clean-icon">🧴</div><div style="flex:1;"><div class="clean-title">洗个澡 (剩余${bathLeft}次)</div><div class="clean-effect">开心+12 好感+3 饱食度-10</div></div></div>
+    <div class="clean-item ${bathLeft<=0?'disabled':''}" onclick="petCleanAction('bath')"><div class="clean-icon">🧴</div><div style="flex:1;"><div class="clean-title">洗个澡 (剩余${bathLeft}次)</div><div class="clean-effect">开心+12 好感+3</div></div></div>
     <div class="btn-row"><div class="btn outline" onclick="closeOverlay()">取消</div></div>`);
 }
 async function petCleanAction(type){
@@ -2192,7 +2265,7 @@ async function petCleanAction(type){
   else if(type==='bath'){
     if((pet.bathLeft??0)<=0) return;
     pet.bathLeft-=1; pet.happiness=Math.min(100,(pet.happiness||0)+12); pet.favor=Math.min(100,(pet.favor||0)+3);
-    pet.hunger=Math.max(0,(pet.hunger??30)-10); tip='开心+12 好感+3';
+    tip='开心+12 好感+3';
   }
   tryPetLevelUp(pet);
   await sSet('pet-state', petState);
@@ -2201,6 +2274,12 @@ async function petCleanAction(type){
 }
 
 function isPetOut(pet){ return !!(pet && pet.outing && pet.outing.returnAt && Date.now() < pet.outing.returnAt); }
+function petStatusBlock(pet){
+  if(!pet) return '没有宠物';
+  if(pet.dead) return `${pet.name} 已经离开了……`;
+  if(pet.fainted) return `${pet.name} 昏倒了，先完成今日任务并打卡叫醒TA`;
+  return null;
+}
 async function sendPetOuting(){
   const pet = getActivePet(); if(!pet) return;
   normalizePetLevel(pet);
@@ -2250,7 +2329,7 @@ function resumeAllOutings(){
 const CARE_ACTIONS = [
   { verb:'轻轻抚摸了', happy:8, favor:3, emoji:'🤍' },
   { verb:'拍拍了', happy:6, favor:2, emoji:'👋' },
-  { verb:'喂了一口零食', happy:5, favor:2, growth:6, emoji:'🍽' },
+  { verb:'喂了一口零食', happy:5, favor:2, emoji:'🍽' },
   { verb:'陪着玩了一会儿', happy:10, favor:3, emoji:'🎾' },
   { verb:'帮忙梳了梳毛', happy:7, favor:2, emoji:'✨' },
   { verb:'抱了抱', happy:9, favor:3, emoji:'🤗' }
@@ -2267,12 +2346,11 @@ async function companionCarePet(){
   const act = CARE_ACTIONS[Math.floor(Math.random()*CARE_ACTIONS.length)];
   pet.happiness = Math.min(100,(pet.happiness||0)+act.happy);
   pet.favor = Math.min(100,(pet.favor||0)+act.favor);
-  if(act.growth && pet.level < PET_MAX_STAGE) pet.growth = Math.min(100,(pet.growth||0)+act.growth);
   tryPetLevelUp(pet);
   if(!pet.careLog) pet.careLog = [];
   const name = chatSettings.companionName || profile.name || 'TA';
   pet.careLog.unshift({ id:uid(), time:Date.now(), text:`${name} 来看了 ${pet.name}，${act.verb}它`,
-    effect:`开心+${act.happy} 好感+${act.favor}`+(act.growth?` 成长+${act.growth}`:''), emoji:act.emoji });
+    effect:`开心+${act.happy} 好感+${act.favor}`, emoji:act.emoji });
   if(pet.careLog.length>40) pet.careLog = pet.careLog.slice(0,40);
   await sSet('pet-state', petState);
   if(currentView==='pet') renderPetPanel();
@@ -2318,7 +2396,13 @@ function renderPetPanel(){
   const bg = level===0 ? 'var(--paper-2)' : (animal.palette.skin+'33');
   const formName = petFormLabel(pet.animal, level);
   const formEmoji = petFormEmoji(pet.animal, level);
-  if(level===0){
+  if(pet.dead){
+    spriteWrap.innerHTML = `<div class="cute-avatar" style="width:${boxSize}px;height:${boxSize}px;background:var(--paper-2);opacity:.4;font-size:${Math.round(size*0.5)}px;">💫</div>`;
+    document.getElementById('petLevelLabel').textContent = `${formEmoji} ${pet.name} 已离开……连续两天未打卡`;
+  } else if(pet.fainted){
+    spriteWrap.innerHTML = `<div class="cute-avatar" style="width:${boxSize}px;height:${boxSize}px;background:var(--paper-2);opacity:.6;" onclick="claimPetCheckin()">${renderPetAvatar(pet.animal,level,size)}</div>`;
+    document.getElementById('petLevelLabel').textContent = `😵 Lv.${level} · ${formEmoji} 昏倒了 · 完成任务并打卡叫醒`;
+  } else if(level===0){
     spriteWrap.innerHTML = `<div class="cute-avatar" style="width:${boxSize}px;height:${boxSize}px;background:${bg};" onclick="petTouchPet()">${renderPetAvatar(pet.animal,0,size)}</div>`;
     document.getElementById('petLevelLabel').textContent = '🥚 一颗蛋 · 喂一次就孵化啦';
   } else if(outNow){
@@ -2365,7 +2449,7 @@ function renderPetPanel(){
   if(foodWrap){
     foodWrap.innerHTML = Object.keys(PET_FOODS).map(k=>{
       const c = (petState.foodInventory && petState.foodInventory[k]) || 0;
-      return `<div class="food-chip">${PET_FOODS[k].emoji} <span class="fc-count">${c}</span></div>`;
+      return `<div class="food-chip" title="${PET_FOODS[k].label}">${PET_FOODS[k].emoji} <span class="fc-count">${c}</span></div>`;
     }).join('');
   }
   const today = todayKey();
