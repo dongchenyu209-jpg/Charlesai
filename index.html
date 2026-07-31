@@ -2659,7 +2659,7 @@ function renderCardsView(){
       return `<span class="card-pill">${c}<span class="del" style="margin-left:6px;opacity:.65;" onclick="editCardText('${escAttr(g)}',${i})">✎</span><span class="del" style="margin-left:4px;" onclick="deleteCard('${escAttr(g)}',${i})">✕</span></span>`;
     }).join('');
     return `<div class="group-block">
-      <div class="group-name"><span>${g}（${cards.length}）</span>${cardSelectMode?'':`<span class="del" onclick="deleteGroup('${escAttr(g)}')">✕ 删除分组</span>`}</div>
+      <div class="group-name"><span onclick="renameGroup('${escAttr(g)}')" style="cursor:pointer;border-bottom:1px dashed var(--rule);" title="点击改名">${g}（${cards.length}）</span>${cardSelectMode?'':`<span style="display:flex;gap:10px;align-items:center;"><span class="del" onclick="renameGroup('${escAttr(g)}')" style="opacity:.75;">✎ 改名</span><span class="del" onclick="deleteGroup('${escAttr(g)}')">✕ 删除分组</span></span>`}</div>
       ${pills}
       ${cardSelectMode?'':`
       <div style="margin-top:8px;display:flex;gap:6px;">
@@ -2739,6 +2739,26 @@ async function moveSelectedCardsToNew(){
 function escAttr(s){ return s.replace(/'/g,"\\'"); }
 async function deleteGroup(g){
   delete cardsData.groups[g]; await sSet('cards-data', cardsData); renderCardsView();
+}
+async function renameGroup(oldName){
+  if(!cardsData.groups || !cardsData.groups[oldName]) return;
+  const val = prompt('修改分组名称', oldName);
+  if(val === null) return;
+  const newName = val.trim();
+  if(!newName){ alert('分组名不能为空'); return; }
+  if(newName === oldName) return;
+  if(cardsData.groups[newName]){
+    if(!confirm(`已有分组「${newName}」，要把「${oldName}」里的字卡合并进去吗？`)) return;
+    const incoming = cardsData.groups[oldName] || [];
+    incoming.forEach(c=>{ if(!cardsData.groups[newName].includes(c)) cardsData.groups[newName].push(c); });
+    delete cardsData.groups[oldName];
+  } else {
+    cardsData.groups[newName] = cardsData.groups[oldName];
+    delete cardsData.groups[oldName];
+  }
+  if(lastGroupUsed === oldName) lastGroupUsed = newName;
+  await sSet('cards-data', cardsData);
+  renderCardsView();
 }
 async function deleteCard(g, idx){
   cardsData.groups[g].splice(idx,1); await sSet('cards-data', cardsData); renderCardsView();
