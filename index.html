@@ -1384,6 +1384,17 @@ async function init(){
   checkProactive();
   setInterval(checkProactive, 20000);
   setInterval(()=>{ maybeAutoPetOuting(); }, 60000);
+  // evaluatePetDays() 只在 init() 里跑过一次；如果 App 被打包成 WebView 常驻后台
+  // （切后台/锁屏不等于重新加载页面），跨天时这个函数永远不会再被触发，
+  // 导致开心值/饱食度不刷新、漏打卡也不会昏倒。这里补上"回到前台就重新判定一次"。
+  const reevaluatePetOnResume = async ()=>{
+    await evaluatePetDays();
+    (petState.pets||[]).forEach(normalizePetLevel);
+    if(currentView==='pet') renderPetPanel();
+  };
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') reevaluatePetOnResume(); });
+  window.addEventListener('focus', reevaluatePetOnResume);
+  setInterval(reevaluatePetOnResume, 5*60000);
   document.getElementById('ledgerDate').valueAsDate = new Date();
   document.getElementById('periodDate').valueAsDate = new Date();
   document.getElementById('diaryDate').valueAsDate = new Date();
@@ -1402,16 +1413,22 @@ function go(name){
   document.getElementById('bnTitle').textContent = VIEW_TITLES[name] || 'EVAN';
   currentView = name;
   if(name==='chat'){
+    // 之前只清了红点、没重新渲染：主动消息在你不在聊天页时已经 push 进 chatMessages 并存库了，
+    // 但界面还是旧的，得手动刷新页面才会显示——这也是导致视频通话被刷新中断的原因。
+    renderChat();
     scrollChatBottom();
     if(chatUnread){ chatUnread=false; sSet('chat-unread', false); renderUnreadDots(); }
   }
   if(name==='letters'){
+    renderLetters();
     if(letterUnread){ letterUnread=false; sSet('letter-unread', false); renderUnreadDots(); }
   }
   if(name==='inboxLetters'){
+    renderInboxLetters();
     if(inboxLetterUnread){ inboxLetterUnread=false; sSet('inbox-letter-unread', false); renderUnreadDots(); }
   }
   if(name==='moments'){
+    renderMoments();
     if(momentsUnread){ momentsUnread=false; sSet('moments-unread', false); renderUnreadDots(); }
   }
   if(name==='petselect'){ petPickChoice = null; renderPetPickGrid(); }
@@ -2061,8 +2078,8 @@ async function evaluatePetDays(){
     if(pet.dead) return;
     if(days>0){
       pet.happiness = Math.max(0, (pet.happiness??0) - 25*days);
-      // 每天刷新饱食度底线，喂食可再拉高
-      pet.hunger = Math.min(100, Math.max(40, (pet.hunger??40)));
+      // 饱食度随天数下降，需要喂食维持（原逻辑用 max(40,x) 只会把数值往上封底，从不下降）
+      pet.hunger = Math.max(0, (pet.hunger??40) - 20*days);
     }
     // 孵化后的宠物：按「上次打卡」判断有没有漏天
     if(pet.level > 0 && lastCheck !== today){
