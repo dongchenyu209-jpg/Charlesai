@@ -419,7 +419,7 @@
     background:var(--paper-2); border:1px solid var(--ink); display:flex;align-items:center;justify-content:center; font-size:14px;
   }
   .msg-avatar img{ width:100%; height:100%; object-fit:cover; }
-  .msg{ max-width:100%; padding:8px 12px; font-size:13.5px; line-height:1.5; position:relative; box-shadow:0 2px 5px -2px rgba(42,36,31,0.18); }
+  .msg{ max-width:100%; padding:8px 12px; font-size:13.5px; line-height:1.5; position:relative; box-shadow:0 2px 5px -2px rgba(42,36,31,0.18); white-space:pre-line; }
 .msg.bot{
   background:var(--paper-2);
   border:1px solid var(--rule);
@@ -1298,15 +1298,18 @@ let todayStatus = null;
 // 摸鱼：活动/地点字卡 + 自动生成的时间线记录
 let moyuState = {
   enabled: false,
-  intervalMin: 15,   // 最短间隔（分钟）
-  intervalMax: 90,   // 最长间隔（分钟）
-  activities: [],    // 摸鱼活动
-  locations: [],     // 工作地点
-  records: [],       // {id, text, time}
+  showDetails: true,   // 是否显示具体信息
+  activities: [],      // 摸鱼活动
+  locations: [],       // 工作地点
+  // 当前这一班：地点 + 上班时长 + 活动时间线
+  currentSession: null, // { id, location, startTime, workMs, records:[{id,text,time}] }
+  history: [],          // 已结束的班次
   nextAt: null
 };
-// 主动消息间隔（分钟），可在传讯设置里调
-let proactiveMsgSettings = { minMinutes: 30, maxMinutes: 360 };
+// 主动消息：开关 + 固定间隔（分钟，实际会在附近随机浮动一点）
+let proactiveMsgSettings = { enabled: true, intervalMinutes: 120 };
+// 拼字卡：开启后回复会随机把多张字卡拼成一段再发
+let spliceCardsEnabled = false;
 let petState = { pet: null };
 let petTasks = [];
 let petPickChoice = null;
@@ -1372,12 +1375,27 @@ async function init(){
   moyuState = await sGet('moyu-state', moyuState);
   if(!Array.isArray(moyuState.activities)) moyuState.activities = [];
   if(!Array.isArray(moyuState.locations)) moyuState.locations = [];
-  if(!Array.isArray(moyuState.records)) moyuState.records = [];
-  if(typeof moyuState.intervalMin !== 'number') moyuState.intervalMin = 15;
-  if(typeof moyuState.intervalMax !== 'number') moyuState.intervalMax = 90;
+  if(!Array.isArray(moyuState.history)) moyuState.history = [];
+  if(typeof moyuState.showDetails !== 'boolean') moyuState.showDetails = true;
+  // 兼容旧版：把扁平 records 收成一班
+  if(Array.isArray(moyuState.records) && moyuState.records.length && !moyuState.currentSession){
+    moyuState.currentSession = {
+      id: uid(), location: '未知地点', startTime: moyuState.records[moyuState.records.length-1].time,
+      workMs: 4*3600*1000, records: moyuState.records.slice().reverse()
+    };
+    delete moyuState.records;
+  }
   proactiveMsgSettings = await sGet('proactive-msg-settings', proactiveMsgSettings);
-  if(typeof proactiveMsgSettings.minMinutes !== 'number') proactiveMsgSettings.minMinutes = 30;
-  if(typeof proactiveMsgSettings.maxMinutes !== 'number') proactiveMsgSettings.maxMinutes = 360;
+  // 兼容旧版 min/max
+  if(typeof proactiveMsgSettings.intervalMinutes !== 'number'){
+    if(typeof proactiveMsgSettings.minMinutes === 'number'){
+      proactiveMsgSettings.intervalMinutes = Math.round((proactiveMsgSettings.minMinutes + (proactiveMsgSettings.maxMinutes||proactiveMsgSettings.minMinutes))/2);
+    } else {
+      proactiveMsgSettings.intervalMinutes = 120;
+    }
+  }
+  if(typeof proactiveMsgSettings.enabled !== 'boolean') proactiveMsgSettings.enabled = true;
+  spliceCardsEnabled = await sGet('splice-cards-enabled', false);
   resumeMoyuSchedule();
   renderMoyuHome();
   petState = await sGet('pet-state', { pets: [], activePetId: null, foodInventory: {}, lastCheckinDate: null, lastOpenDate: null });
@@ -3082,6 +3100,20 @@ function getRandomCardText(){
   lastGroupUsed = pool[idx].group; lastCardUsed = {text: pool[idx].card};
   return pool[idx].card;
 }
+/* 拼字卡：不限定张数，从字卡库里随机抽若干张拼成一段 */
+function getSplicedCardText(){
+  const groups = cardsData.groups||{};
+  let pool = [];
+  Object.keys(groups).forEach(g=> (groups[g]||[]).forEach(card=> pool.push(card)));
+  if(pool.length===0) return null;
+  if(pool.length===1) return pool[0];
+  const shuffled = pool.slice().sort(()=> Math.random()-0.5);
+  // 张数完全随机：至少 2 张，最多整库都有可能被抽到
+  const n = 2 + Math.floor(Math.random() * (shuffled.length - 1));
+  const picked = shuffled.slice(0, n);
+  lastCardUsed = {text: picked[0]};
+  return picked.join('\n');
+}
 const REDPACKET_NOTES = ['给你买奶茶','塞进你口袋','抢一个','爱的红包','恭喜发财','小心心'];
 function pickReplyFor(userText){
   const roll = Math.random();
@@ -3101,7 +3133,13 @@ function pickReplyFor(userText){
     const g = QUICK_ACTIONS[Math.floor(Math.random()*QUICK_ACTIONS.length)];
     return { type:'gesture', content: `${chatSettings.companionName}${g.verb}你` };
   }
-  const text = getRandomCardText();
+  // 拼字卡开启后也不是每条都拼，对半几率触发；没触发就正常抽一张
+  let text;
+  if(spliceCardsEnabled && Math.random() < 0.5){
+    text = getSplicedCardText() || getRandomCardText();
+  } else {
+    text = getRandomCardText();
+  }
   if(!text) return null;
   const quoteOf = maybeQuoteMessage();
   return quoteOf ? { type:'text', content:text, quoteOf } : { type:'text', content:text };
@@ -3112,9 +3150,14 @@ function pickReplyFor(userText){
    ============================================================ */
 function randomBetween(minMs, maxMs){ return minMs + Math.random()*(maxMs-minMs); }
 function scheduleNextProactiveMsg(){
-  // 在传讯设置里可调的主动消息间隔（分钟）
-  const lo = Math.max(1, Math.min(proactiveMsgSettings.minMinutes, proactiveMsgSettings.maxMinutes));
-  const hi = Math.max(lo, Math.max(proactiveMsgSettings.minMinutes, proactiveMsgSettings.maxMinutes));
+  if(proactiveMsgSettings.enabled === false){
+    proactiveState.nextMsgAt = null;
+    return;
+  }
+  // 以设定间隔为中心，上下浮动约 20%，避免每次都卡在整点
+  const base = Math.max(5, proactiveMsgSettings.intervalMinutes || 120);
+  const lo = Math.max(1, Math.round(base * 0.8));
+  const hi = Math.max(lo, Math.round(base * 1.2));
   proactiveState.nextMsgAt = Date.now() + randomBetween(lo*60*1000, hi*60*1000);
 }
 function scheduleNextProactiveLetter(){
@@ -3127,7 +3170,9 @@ function scheduleNextProactiveCall(){
 }
 function ensureProactiveSchedule(){
   let changed = false;
-  if(!proactiveState.nextMsgAt){ scheduleNextProactiveMsg(); changed = true; }
+  if(proactiveMsgSettings.enabled !== false){
+    if(!proactiveState.nextMsgAt){ scheduleNextProactiveMsg(); changed = true; }
+  } else if(proactiveState.nextMsgAt){ proactiveState.nextMsgAt = null; changed = true; }
   if(!proactiveState.nextLetterAt){ scheduleNextProactiveLetter(); changed = true; }
   if(!proactiveState.nextCallAt){ scheduleNextProactiveCall(); changed = true; }
   if(!proactiveState.nextMomentAt){ scheduleNextProactiveMoment(); changed = true; }
@@ -3136,7 +3181,7 @@ function ensureProactiveSchedule(){
 }
 async function checkProactive(){
   let changed = false;
-  if(proactiveState.nextMsgAt && Date.now() >= proactiveState.nextMsgAt){
+  if(proactiveMsgSettings.enabled !== false && proactiveState.nextMsgAt && Date.now() >= proactiveState.nextMsgAt){
     await sendProactiveMessage();
     scheduleNextProactiveMsg();
     changed = true;
@@ -3395,21 +3440,28 @@ function openChatSettings(){
       <span>已读不回<div style="font-size:10.5px;color:var(--ink-soft);font-weight:400;">开启后每条消息都是对半几率，不是每次都不回</div></span>
       <div class="switch ${chatSettings.readNoReply?'on':''}" id="csReadNoReply" onclick="this.classList.toggle('on')"><div class="dot"></div></div>
     </div>
-    <div class="box-title" style="margin-top:14px;">主动消息间隔</div>
-    <label class="field">最短：<span id="csProMinVal">${proactiveMsgSettings.minMinutes}</span> 分钟</label>
-    <input type="range" min="5" max="1440" step="5" value="${proactiveMsgSettings.minMinutes}" oninput="document.getElementById('csProMinVal').textContent=this.value" id="csProMin" style="width:100%;">
-    <label class="field">最长：<span id="csProMaxVal">${proactiveMsgSettings.maxMinutes}</span> 分钟</label>
-    <input type="range" min="5" max="2880" step="5" value="${proactiveMsgSettings.maxMinutes}" oninput="document.getElementById('csProMaxVal').textContent=this.value" id="csProMax" style="width:100%;">
-    <div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">TA 主动发消息会在这个时间区间里随机挑一个时间点</div>
-    <div class="box-title" style="margin-top:14px;">摸鱼小记</div>
+    <div class="box-title" style="margin-top:14px;">节奏</div>
     <div class="switch-row">
-      <span>开启摸鱼记录<div style="font-size:10.5px;color:var(--ink-soft);font-weight:400;">开启后按间隔自动生成 TA 在干嘛</div></span>
+      <span>主动发消息给我</span>
+      <div class="switch ${proactiveMsgSettings.enabled!==false?'on':''}" id="csProEnabled" onclick="this.classList.toggle('on')"><div class="dot"></div></div>
+    </div>
+    <label class="field">间隔：<span id="csProIntervalVal">${proactiveMsgSettings.intervalMinutes||120}</span> 分钟</label>
+    <input type="range" min="10" max="720" step="10" value="${proactiveMsgSettings.intervalMinutes||120}" oninput="document.getElementById('csProIntervalVal').textContent=this.value" id="csProInterval" style="width:100%;">
+    <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">会在设定值附近小幅随机浮动</div>
+    <div class="box-title" style="margin-top:14px;">拼字卡</div>
+    <div class="switch-row">
+      <span>拼字卡<div style="font-size:10.5px;color:var(--ink-soft);font-weight:400;">开启后有机会随机把多张字卡拼在一起发，不是每条都拼</div></span>
+      <div class="switch ${spliceCardsEnabled?'on':''}" id="csSpliceCards" onclick="this.classList.toggle('on')"><div class="dot"></div></div>
+    </div>
+    <div class="box-title" style="margin-top:14px;">摸鱼记录</div>
+    <div class="switch-row">
+      <span>主动向我汇报工作</span>
       <div class="switch ${moyuState.enabled?'on':''}" id="csMoyuEnabled" onclick="this.classList.toggle('on')"><div class="dot"></div></div>
     </div>
-    <label class="field">摸鱼最短间隔：<span id="csMoyuMinVal">${moyuState.intervalMin}</span> 分钟</label>
-    <input type="range" min="5" max="180" step="5" value="${moyuState.intervalMin}" oninput="document.getElementById('csMoyuMinVal').textContent=this.value" id="csMoyuMin" style="width:100%;">
-    <label class="field">摸鱼最长间隔：<span id="csMoyuMaxVal">${moyuState.intervalMax}</span> 分钟</label>
-    <input type="range" min="5" max="360" step="5" value="${moyuState.intervalMax}" oninput="document.getElementById('csMoyuMaxVal').textContent=this.value" id="csMoyuMax" style="width:100%;">
+    <div class="switch-row">
+      <span>是否显示具体信息</span>
+      <div class="switch ${moyuState.showDetails!==false?'on':''}" id="csMoyuDetails" onclick="this.classList.toggle('on')"><div class="dot"></div></div>
+    </div>
     <div class="btn-row" style="margin-top:8px;"><div class="btn outline" onclick="closeOverlay(); openMoyuManagePanel();">🐟 管理摸鱼活动 / 工作地点</div></div>
     <div class="box-title" style="margin-top:14px;">聊天背景</div>
     <div class="btn-row">
@@ -3479,22 +3531,19 @@ async function saveChatSettings(){
   chatSettings.delayMax = parseInt(document.getElementById('csDelayMax').value,10);
   chatSettings.readNoReply = document.getElementById('csReadNoReply').classList.contains('on');
   await sSet('chat-settings', chatSettings);
-  const pMin = parseInt(document.getElementById('csProMin').value,10);
-  const pMax = parseInt(document.getElementById('csProMax').value,10);
-  proactiveMsgSettings.minMinutes = Math.min(pMin, pMax);
-  proactiveMsgSettings.maxMinutes = Math.max(pMin, pMax);
+  proactiveMsgSettings.enabled = document.getElementById('csProEnabled').classList.contains('on');
+  proactiveMsgSettings.intervalMinutes = parseInt(document.getElementById('csProInterval').value,10) || 120;
   await sSet('proactive-msg-settings', proactiveMsgSettings);
-  // 保存后立刻按新区间重排下一次主动消息
   scheduleNextProactiveMsg();
   await sSet('proactive-state', proactiveState);
+  spliceCardsEnabled = document.getElementById('csSpliceCards').classList.contains('on');
+  await sSet('splice-cards-enabled', spliceCardsEnabled);
   const wasEnabled = moyuState.enabled;
   moyuState.enabled = document.getElementById('csMoyuEnabled').classList.contains('on');
-  const mMin = parseInt(document.getElementById('csMoyuMin').value,10);
-  const mMax = parseInt(document.getElementById('csMoyuMax').value,10);
-  moyuState.intervalMin = Math.min(mMin, mMax);
-  moyuState.intervalMax = Math.max(mMin, mMax);
+  moyuState.showDetails = document.getElementById('csMoyuDetails').classList.contains('on');
   if(moyuState.enabled){
     if(!wasEnabled || !moyuState.nextAt) scheduleNextMoyu();
+    if(!moyuState.currentSession) await startMoyuSession();
   } else {
     moyuState.nextAt = null;
   }
@@ -4065,7 +4114,7 @@ async function saveProfile(){
 }
 async function resetAll(){
   if(!confirm('确定要清空全部数据吗？这个操作无法撤销。')) return;
-  const keys = ['profile','chat-settings','chat-messages','cards-data','ledger-entries','period-entries','diary-entries','recipe-entries','theme-settings','moments-posts','letters','inbox-letters','call-logs','proactive-state','chat-unread','letter-unread','inbox-letter-unread','moments-unread','life-photos','status-pool','today-status','custom-bubble-css','rec-store-migrated-v2','pet-state','pet-tasks','moyu-state','proactive-msg-settings'];
+  const keys = ['profile','chat-settings','chat-messages','cards-data','ledger-entries','period-entries','diary-entries','recipe-entries','theme-settings','moments-posts','letters','inbox-letters','call-logs','proactive-state','chat-unread','letter-unread','inbox-letter-unread','moments-unread','life-photos','status-pool','today-status','custom-bubble-css','rec-store-migrated-v2','pet-state','pet-tasks','moyu-state','proactive-msg-settings','splice-cards-enabled'];
   for(const k of keys){
     try{ if(hasCloudStorage()) await window.storage.delete(k, false); }catch(e){}
     try{ localStorage.removeItem('EVAN:'+k); }catch(e){}
@@ -4085,7 +4134,7 @@ async function exportBackup(){
   const data = {
     profile, chatSettings, chatMessages: fullChat, cardsData, ledgerEntries, periodEntries,
     diaryEntries, recipeEntries, momentsPosts: fullMoments, letters, inboxLetters, callLogs, themeSettings, proactiveState,
-    lifePhotos: fullPhotos, statusPool, todayStatus, customBubbleCSS, petState, petTasks, moyuState, proactiveMsgSettings,
+    lifePhotos: fullPhotos, statusPool, todayStatus, customBubbleCSS, petState, petTasks, moyuState, proactiveMsgSettings, spliceCardsEnabled,
     exportedAt: Date.now()
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
@@ -4128,6 +4177,7 @@ function onImportBackupFile(e){
     petTasks = data.petTasks || [];
     moyuState = data.moyuState || moyuState;
     proactiveMsgSettings = data.proactiveMsgSettings || proactiveMsgSettings;
+    if(typeof data.spliceCardsEnabled === 'boolean') spliceCardsEnabled = data.spliceCardsEnabled;
     await sSet('profile', profile);
     await sSet('chat-settings', chatSettings);
     await sSet('cards-data', cardsData);
@@ -4147,6 +4197,7 @@ function onImportBackupFile(e){
     await sSet('pet-tasks', petTasks);
     await sSet('moyu-state', moyuState);
     await sSet('proactive-msg-settings', proactiveMsgSettings);
+    await sSet('splice-cards-enabled', spliceCardsEnabled);
     // 恢复到各自专用的逐条记录表：先清空旧的，再把备份里的全部记录整体写进去
     await recClear('chatMessages'); await recPutMany('chatMessages', importedChat.map((m,i)=> m.time?m:{...m,time:Date.now()-(importedChat.length-i)}));
     await recClear('momentsPosts'); await recPutMany('momentsPosts', importedMoments.map((p,i)=> p.time?p:{...p,time:Date.now()-i}));
@@ -4254,57 +4305,114 @@ function applyCustomBubbleCSSToPage(){
 }
 
 /* ============================================================
-   摸鱼小记：活动 / 地点字卡 + 按间隔自动生成时间线
+   摸鱼小记：活动 / 地点字卡 + 随机时间线（当前班次 + 历史）
    ============================================================ */
 function renderMoyuHome(){
   const el = document.getElementById('moyuLatestText');
   if(!el) return;
   if(!moyuState.enabled){ el.textContent = '未开启'; return; }
-  const latest = (moyuState.records||[])[0];
-  el.textContent = latest ? latest.text : '暂无记录';
-}
-function pickMoyuText(){
-  const acts = moyuState.activities || [];
-  const locs = moyuState.locations || [];
-  const pool = [];
-  acts.forEach(t=> pool.push(t));
-  locs.forEach(t=> pool.push(t));
-  if(pool.length===0) return null;
-  // 偶尔把「地点 + 活动」拼成一句，更像真实摸鱼动态
-  if(acts.length && locs.length && Math.random() < 0.28){
-    const a = acts[Math.floor(Math.random()*acts.length)];
-    const l = locs[Math.floor(Math.random()*locs.length)];
-    return Math.random() < 0.5 ? (l + '·' + a) : (a + '（' + l + '）');
+  const sess = moyuState.currentSession;
+  if(!sess){ el.textContent = '暂无记录'; return; }
+  if(moyuState.showDetails === false){
+    el.textContent = (sess.location || '工作中') + ' · 进行中';
+    return;
   }
-  return pool[Math.floor(Math.random()*pool.length)];
+  const latest = (sess.records && sess.records.length) ? sess.records[sess.records.length-1] : null;
+  el.textContent = latest ? latest.text : ((sess.location||'') + ' · 进行中');
+}
+function pickMoyuActivity(){
+  const acts = moyuState.activities || [];
+  if(!acts.length) return null;
+  return acts[Math.floor(Math.random()*acts.length)];
+}
+function pickMoyuLocation(){
+  const locs = moyuState.locations || [];
+  if(!locs.length) return '未知地点';
+  return locs[Math.floor(Math.random()*locs.length)];
+}
+function formatDurationShort(ms){
+  const h = Math.floor(ms/3600000);
+  const m = Math.floor((ms%3600000)/60000);
+  if(h<=0) return m + '分钟';
+  if(m<=0) return h + 'h';
+  return h + 'h';
+}
+function formatRemain(ms){
+  if(ms <= 0) return '已下班';
+  const h = Math.floor(ms/3600000);
+  const m = Math.floor((ms%3600000)/60000);
+  if(h>0) return '剩余工作时间 ' + h + '小时' + m + '分钟';
+  return '剩余工作时间 ' + m + '分钟';
 }
 function scheduleNextMoyu(){
-  const lo = Math.max(1, Math.min(moyuState.intervalMin, moyuState.intervalMax));
-  const hi = Math.max(lo, Math.max(moyuState.intervalMin, moyuState.intervalMax));
-  moyuState.nextAt = Date.now() + randomBetween(lo*60*1000, hi*60*1000);
+  // 纯随机：5 分钟 ~ 3 天，什么时候想摸就什么时候摸
+  moyuState.nextAt = Date.now() + randomBetween(5*60*1000, 3*24*3600*1000);
+}
+async function startMoyuSession(){
+  if(!moyuState.enabled) return;
+  const hasActs = (moyuState.activities||[]).length > 0;
+  const hasLocs = (moyuState.locations||[]).length > 0;
+  if(!hasActs && !hasLocs) return;
+  // 先把上一班归档
+  if(moyuState.currentSession){
+    if(!moyuState.history) moyuState.history = [];
+    moyuState.history.unshift(moyuState.currentSession);
+    if(moyuState.history.length > 30) moyuState.history = moyuState.history.slice(0,30);
+  }
+  const workMs = randomBetween(2*3600*1000, 8*3600*1000); // 2~8 小时一班
+  moyuState.currentSession = {
+    id: uid(),
+    location: pickMoyuLocation(),
+    startTime: Date.now(),
+    workMs,
+    records: []
+  };
+  // 开班先记一条活动
+  const first = pickMoyuActivity();
+  if(first){
+    moyuState.currentSession.records.push({ id:uid(), text:first, time: Date.now() });
+  }
+  scheduleNextMoyu();
+  await sSet('moyu-state', moyuState);
+  renderMoyuHome();
 }
 async function generateMoyuRecord(){
   if(!moyuState.enabled) return;
-  const text = pickMoyuText();
-  if(!text){
-    // 字卡空着就先不记，等用户加了再继续
+  if(!(moyuState.activities||[]).length && !(moyuState.locations||[]).length){
     scheduleNextMoyu();
     await sSet('moyu-state', moyuState);
     return;
   }
-  const rec = { id:uid(), text, time: Date.now() };
-  if(!moyuState.records) moyuState.records = [];
-  moyuState.records.unshift(rec);
-  if(moyuState.records.length > 80) moyuState.records = moyuState.records.slice(0, 80);
+  if(!moyuState.currentSession){
+    await startMoyuSession();
+    return;
+  }
+  const sess = moyuState.currentSession;
+  const elapsed = Date.now() - sess.startTime;
+  // 下班了就开新班
+  if(elapsed >= sess.workMs){
+    await startMoyuSession();
+    return;
+  }
+  const text = pickMoyuActivity();
+  if(text){
+    sess.records.push({ id:uid(), text, time: Date.now() });
+    if(sess.records.length > 40) sess.records = sess.records.slice(-40);
+  }
   scheduleNextMoyu();
   await sSet('moyu-state', moyuState);
   renderMoyuHome();
-  // 若当前正打开小记面板，刷新列表
-  const list = document.getElementById('moyuRecordList');
-  if(list) renderMoyuNotePanelBody();
+  if(document.getElementById('moyuNoteBody')) renderMoyuNotePanelBody();
 }
 function resumeMoyuSchedule(){
   if(!moyuState.enabled) return;
+  if(!moyuState.currentSession){
+    // 有字卡才自动开班
+    if((moyuState.activities||[]).length || (moyuState.locations||[]).length){
+      startMoyuSession();
+    }
+    return;
+  }
   if(!moyuState.nextAt){ scheduleNextMoyu(); sSet('moyu-state', moyuState); }
 }
 async function checkMoyuTick(){
@@ -4316,11 +4424,12 @@ async function checkMoyuTick(){
     await sSet('moyu-state', moyuState);
   }
 }
+
 function openMoyuNotePanel(){
   openOverlay(`
     <div class="drawer-head"><h3>🐟 摸鱼小记</h3><span class="close-x" onclick="closeOverlay()">✕</span></div>
     <div class="btn-row" style="margin-bottom:10px;">
-      <div class="btn ${moyuState.enabled?'':'outline'}" id="moyuTabCurrent" onclick="switchMoyuNoteTab('current')">🕐 当前</div>
+      <div class="btn" id="moyuTabCurrent" onclick="switchMoyuNoteTab('current')">🕐 当前</div>
       <div class="btn outline" id="moyuTabHistory" onclick="switchMoyuNoteTab('history')">☰ 记录</div>
       <div class="btn outline" onclick="closeOverlay(); openMoyuManagePanel();">管理字卡</div>
     </div>
@@ -4335,57 +4444,77 @@ function switchMoyuNoteTab(tab){
   if(hisBtn){ hisBtn.className = 'btn' + (tab==='history'?'':' outline'); }
   renderMoyuNotePanelBody(tab);
 }
+function renderSessionCard(sess, isCurrent){
+  if(!sess) return '';
+  const show = moyuState.showDetails !== false;
+  const dateStr = new Date(sess.startTime).toLocaleDateString('zh-CN');
+  const remain = isCurrent ? (sess.workMs - (Date.now()-sess.startTime)) : 0;
+  const badge = formatDurationShort(sess.workMs);
+  let recordsHtml = '';
+  if(show){
+    const list = (sess.records||[]).slice().reverse();
+    if(!list.length){
+      recordsHtml = '<div class="empty-note" style="padding:12px 0;">这一班还没有活动记录</div>';
+    } else {
+      recordsHtml = list.map(r=>{
+        const t = new Date(r.time).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+        return `<div style="border:1px solid var(--rule);background:var(--paper-2);padding:10px 12px;margin-top:8px;border-radius:2px;">
+          <div style="font-size:11px;color:var(--ink-soft);">🕐 ${t}</div>
+          <div style="margin-top:4px;font-size:13.5px;">${r.text}</div>
+        </div>`;
+      }).join('');
+    }
+  } else {
+    recordsHtml = `<div style="margin-top:10px;padding:12px;border:1px dashed var(--rule);color:var(--ink-soft);font-size:12.5px;text-align:center;">具体信息已隐藏</div>`;
+  }
+  return `<div class="box" style="margin-bottom:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-family:'Noto Serif SC',serif;font-weight:700;font-size:15px;">📍 ${sess.location||'未知地点'}</div>
+      <span class="stamp-tag" style="transform:none;">🕐 ${badge}</span>
+    </div>
+    <div style="font-size:11.5px;color:var(--ink-soft);margin-top:6px;">📅 ${dateStr}</div>
+    ${isCurrent ? `<div style="margin-top:10px;padding:8px 10px;background:var(--blush);border:1px solid var(--rule);font-size:12.5px;text-align:center;">⏳ ${formatRemain(remain)}</div>` : ''}
+    ${recordsHtml}
+  </div>`;
+}
 function renderMoyuNotePanelBody(tab){
   const body = document.getElementById('moyuNoteBody');
   if(!body) return;
   if(tab===undefined) tab = 'current';
   if(!moyuState.enabled){
-    body.innerHTML = `<div class="empty-note">摸鱼记录尚未开启<br><span style="font-size:11.5px;">请在「传讯 → 设置」里打开并配置间隔</span></div>
+    body.innerHTML = `<div class="empty-note">摸鱼记录尚未开启<br><span style="font-size:11.5px;">请在「传讯 → 设置」里打开「主动向我汇报工作」</span></div>
       <div class="btn-row" style="margin-top:12px;"><div class="btn" onclick="closeOverlay(); openChatSettings();">去传讯设置</div></div>`;
     return;
   }
-  const actsEmpty = !(moyuState.activities&&moyuState.activities.length) && !(moyuState.locations&&moyuState.locations.length);
-  if(actsEmpty){
+  const emptyCards = !(moyuState.activities||[]).length && !(moyuState.locations||[]).length;
+  if(emptyCards){
     body.innerHTML = `<div class="empty-note">还没有摸鱼活动 / 工作地点字卡<br><span style="font-size:11.5px;">先去管理里添加，系统才会自动生成记录</span></div>
       <div class="btn-row" style="margin-top:12px;"><div class="btn" onclick="closeOverlay(); openMoyuManagePanel();">去添加字卡</div></div>`;
     return;
   }
-  const records = moyuState.records || [];
   if(tab==='current'){
-    const latest = records[0];
-    if(!latest){
-      body.innerHTML = `<div style="text-align:center;padding:28px 10px;">
-        <div style="font-size:42px;opacity:.35;">🐟</div>
-        <div style="margin-top:10px;color:var(--ink-soft);font-size:13.5px;">暂无摸鱼记录</div>
-        <div style="margin-top:6px;color:var(--ink-soft);font-size:11.5px;">系统会按设置的间隔时间自动随机生成</div>
-        <div class="btn-row" style="margin-top:14px;justify-content:center;"><div class="btn outline" onclick="generateMoyuRecord()">立即生成一条</div></div>
-      </div>`;
+    if(!moyuState.currentSession){
+      body.innerHTML = `<div class="empty-note">暂无当前摸鱼记录</div>
+        <div class="btn-row"><div class="btn outline" onclick="startMoyuSession().then(()=>renderMoyuNotePanelBody('current'))">开始一班</div></div>`;
     } else {
-      const t = new Date(latest.time).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      body.innerHTML = `<div class="box" style="text-align:center;">
-        <div style="font-size:11px;color:var(--ink-soft);">🕐 ${t}</div>
-        <div style="font-size:18px;font-family:'Noto Serif SC',serif;font-weight:700;margin-top:10px;color:var(--rouge);">${latest.text}</div>
-        <div style="font-size:11.5px;color:var(--ink-soft);margin-top:12px;">下一条大约在 ${moyuState.nextAt ? new Date(moyuState.nextAt).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}) : '—'} 前后</div>
-      </div>
-      <div class="btn-row"><div class="btn outline" onclick="generateMoyuRecord()">立即再摸一条</div></div>`;
+      body.innerHTML = `<div style="text-align:center;margin-bottom:8px;"><span class="stamp-tag">当前摸鱼记录</span></div>
+        ${renderSessionCard(moyuState.currentSession, true)}
+        <div class="btn-row"><div class="btn outline" onclick="generateMoyuRecord()">立即摸一条</div></div>`;
     }
   } else {
-    if(!records.length){
-      body.innerHTML = '<div class="empty-note">还没有历史记录</div>';
+    const hist = moyuState.history || [];
+    if(!hist.length){
+      body.innerHTML = '<div class="empty-note">还没有历史班次</div>';
     } else {
-      body.innerHTML = `<div id="moyuRecordList">${records.map(r=>{
-        const t = new Date(r.time).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
-        return `<div class="list-item"><div><span style="color:var(--rouge);font-size:12px;">🕐 ${t}</span><div style="margin-top:4px;">${r.text}</div></div></div>`;
-      }).join('')}</div>
-      <div class="btn-row" style="margin-top:10px;"><div class="btn outline" onclick="clearMoyuRecords()">清空记录</div></div>`;
+      body.innerHTML = hist.map(s=>renderSessionCard(s, false)).join('') +
+        `<div class="btn-row" style="margin-top:10px;"><div class="btn outline" onclick="clearMoyuHistory()">清空历史</div></div>`;
     }
   }
 }
-async function clearMoyuRecords(){
-  if(!confirm('确定清空全部摸鱼记录吗？')) return;
-  moyuState.records = [];
+async function clearMoyuHistory(){
+  if(!confirm('确定清空全部历史摸鱼记录吗？')) return;
+  moyuState.history = [];
   await sSet('moyu-state', moyuState);
-  renderMoyuHome();
   renderMoyuNotePanelBody('history');
 }
 
@@ -4417,9 +4546,9 @@ function renderMoyuManageBody(){
   const list = isAct ? (moyuState.activities||[]) : (moyuState.locations||[]);
   const label = isAct ? '摸鱼活动' : '工作地点';
   body.innerHTML = `
-    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">当前「${label}」共 ${list.length} 条。系统会从活动 / 地点里随机抽，偶尔拼成一句。</div>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">当前「${label}」共 ${list.length} 条。</div>
     <label class="field">批量添加（每行一条）</label>
-    <textarea id="moyuBulkInput" placeholder="${isAct ? '超市扫荡&#10;陪你&#10;边工作边想你' : '公司&#10;花店&#10;咖啡馆'}" style="min-height:80px;"></textarea>
+    <textarea id="moyuBulkInput" placeholder="${isAct ? '超市扫荡&#10;陪你&#10;边工作边想你' : '天行&#10;花店&#10;咖啡馆'}" style="min-height:80px;"></textarea>
     <div class="btn-row">
       <div class="btn" onclick="addMoyuBulk()">添加</div>
       <div class="btn outline" onclick="document.getElementById('moyuFileInput').click()">📁 导入文件</div>
