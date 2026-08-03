@@ -1977,6 +1977,8 @@ function normalizePetLevel(pet){
     if(pet.fainted === undefined) pet.fainted = false;
     if(pet.missCheckinDays === undefined) pet.missCheckinDays = 0;
     if(pet.dead === undefined) pet.dead = false;
+    if(pet.reviveProgress === undefined) pet.reviveProgress = 0;
+    if(pet.reviveLastDate === undefined) pet.reviveLastDate = null;
     return;
   }
   if(pet.stage === 0 || (!pet.stage && !(pet.growth>0))){ pet.level = 0; pet.growth = pet.growth||0; }
@@ -1991,6 +1993,8 @@ function normalizePetLevel(pet){
   if(pet.fainted === undefined) pet.fainted = false;
   if(pet.missCheckinDays === undefined) pet.missCheckinDays = 0;
   if(pet.dead === undefined) pet.dead = false;
+  if(pet.reviveProgress === undefined) pet.reviveProgress = 0;
+  if(pet.reviveLastDate === undefined) pet.reviveLastDate = null;
 }
 function tryPetLevelUp(pet){
   if(!pet) return false;
@@ -2204,7 +2208,6 @@ async function deletePetTask(id){
 async function claimPetCheckin(){
   if(!petState.pets || !petState.pets.length) return;
   const today = todayKey();
-  if(petState.lastCheckinDate===today){ showPetToast('今天已经打过卡啦，明天再来～'); return; }
   if(!petTasksAllDoneToday()){
     showPetToast(!petTasks.length ? '先加几条每日任务并打勾，才能打卡哦' : '先把今天的每日任务都打勾完成呀～');
     return;
@@ -2212,7 +2215,28 @@ async function claimPetCheckin(){
   const pet = getActivePet();
   if(pet){
     normalizePetLevel(pet);
-    if(pet.dead){ showPetToast('已经回不来了……'); return; }
+    if(pet.dead){
+      // 已经离开：连续完成两天的每日任务即可唤醒复活（每天只算一次，用宠物自己的日期字段计数，不占用全局打卡）
+      if(pet.reviveLastDate === today){ showPetToast('今天的救援任务已经完成啦，明天再来～'); return; }
+      pet.reviveLastDate = today;
+      pet.reviveProgress = (pet.reviveProgress||0) + 1;
+      if(pet.reviveProgress >= 2){
+        pet.dead = false; pet.fainted = false; pet.missCheckinDays = 0;
+        pet.reviveProgress = 0; pet.reviveLastDate = null;
+        pet.happiness = 50; pet.hunger = 50;
+        await sSet('pet-state', petState);
+        renderPetPanel();
+        showPetToast(`🎉 ${pet.name} 醒过来了，欢迎TA回来！`);
+      } else {
+        await sSet('pet-state', petState);
+        renderPetPanel();
+        showPetToast(`已完成第 ${pet.reviveProgress}/2 天的救援任务，再坚持一天就能唤醒 TA～`);
+      }
+      return;
+    }
+  }
+  if(petState.lastCheckinDate===today){ showPetToast('今天已经打过卡啦，明天再来～'); return; }
+  if(pet){
     // 打卡：醒过来 + 好感/成长/开心
     pet.fainted = false;
     pet.missCheckinDays = 0;
@@ -2465,8 +2489,8 @@ function renderPetPanel(){
   const formName = petFormLabel(pet.animal, level);
   const formEmoji = petFormEmoji(pet.animal, level);
   if(pet.dead){
-    spriteWrap.innerHTML = `<div class="cute-avatar" style="width:${boxSize}px;height:${boxSize}px;background:var(--paper-2);opacity:.4;font-size:${Math.round(size*0.5)}px;">💫</div>`;
-    document.getElementById('petLevelLabel').textContent = `${formEmoji} ${pet.name} 已离开……连续两天未打卡`;
+    spriteWrap.innerHTML = `<div class="cute-avatar" style="width:${boxSize}px;height:${boxSize}px;background:var(--paper-2);opacity:.4;font-size:${Math.round(size*0.5)}px;" onclick="claimPetCheckin()">💫</div>`;
+    document.getElementById('petLevelLabel').textContent = `${formEmoji} ${pet.name} 已离开…… 连续完成 2 天每日任务可唤醒（${pet.reviveProgress||0}/2）`;
   } else if(pet.fainted){
     spriteWrap.innerHTML = `<div class="cute-avatar" style="width:${boxSize}px;height:${boxSize}px;background:var(--paper-2);opacity:.6;" onclick="claimPetCheckin()">${renderPetAvatar(pet.animal,level,size)}</div>`;
     document.getElementById('petLevelLabel').textContent = `😵 Lv.${level} · ${formEmoji} 昏倒了 · 完成任务并打卡叫醒`;
