@@ -729,7 +729,7 @@
   <!-- ============ INBOX LETTERS 来信（TA主动写的信） ============ -->
   <section id="view-inboxLetters" class="view hidden">
     <div class="view-head"><div class="icon-btn" onclick="go('home')">←</div><h2>来信</h2></div>
-    <p style="font-size:12px;color:var(--ink-soft);margin:-6px 0 12px;">这里是 TA 自己想到就主动寄给你的信，不用你先写。</p>
+    <p style="font-size:12px;color:var(--ink-soft);margin:-6px 0 12px;">这里是 TA 自己想到就主动寄给你的信。收到后可以在信的下面直接回信，TA 大概会再花 10~24 小时写回你。</p>
     <div id="inboxLettersList"></div>
   </section>
 
@@ -1379,6 +1379,7 @@ async function init(){
   renderLifePhotos();
   renderTodayStatusHome();
   resumeLetterTimers();
+  resumeInboxLetterReplyTimers();
   renderUnreadDots();
   ensureProactiveSchedule();
   checkProactive();
@@ -1964,7 +1965,8 @@ function pickRandomFood(){
   return 'cookie';
 }
 function daysBetween(a,b){
-  const d1 = new Date(a+'T00:00:00'), d2 = new Date(b+'T00:00:00');
+  const pa = String(a).split('-').map(Number), pb = String(b).split('-').map(Number);
+  const d1 = new Date(pa[0], pa[1]-1, pa[2]), d2 = new Date(pb[0], pb[1]-1, pb[2]);
   return Math.round((d2-d1)/86400000);
 }
 function showPetToast(msg){
@@ -3859,9 +3861,81 @@ function renderInboxLetters(){
   if(!wrap) return;
   wrap.innerHTML = inboxLetters.length ? inboxLetters.map(l=>{
     const t = new Date(l.time).toLocaleString('zh-CN');
-    return `<div class="box"><div style="font-size:11px;color:var(--rouge);">${chatSettings.companionName} · ${t}</div>
-      <div style="font-size:13px;margin-top:6px;white-space:pre-line;">${l.content}</div></div>`;
+    let thread = '';
+    // 我的回信
+    if(l.userReply){
+      const urt = new Date(l.userReplyTime).toLocaleString('zh-CN');
+      thread += `<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--rule);">
+        <div style="font-size:11px;color:var(--ink-soft);">我的回信 · ${urt}</div>
+        <div style="font-size:13px;margin-top:6px;white-space:pre-line;">${l.userReply}</div>
+      </div>`;
+    }
+    // TA 对我回信的再回复
+    if(l.botReplied && l.botReplyContent){
+      const brt = new Date(l.botReplyTime).toLocaleString('zh-CN');
+      thread += `<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--rule);">
+        <div style="font-size:11px;color:var(--rouge);">${chatSettings.companionName} 的再回信 · ${brt}</div>
+        <div style="font-size:13px;margin-top:6px;white-space:pre-line;">${l.botReplyContent}</div>
+      </div>`;
+    } else if(l.userReply && !l.botReplied && l.scheduledBotReplyAt){
+      const eta = new Date(l.scheduledBotReplyAt).toLocaleString('zh-CN');
+      thread += `<div style="margin-top:10px;font-size:12px;color:var(--ink-soft);">TA 还在写回信…大概 ${eta} 前会寄到</div>`;
+    }
+    // 还没回过：显示输入框
+    let replyForm = '';
+    if(!l.userReply){
+      replyForm = `<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--rule);">
+        <textarea id="inboxReply_${l.id}" placeholder="给这封信写回信…" style="min-height:72px;"></textarea>
+        <div class="btn-row"><div class="btn" onclick="replyToInboxLetter('${l.id}')">寄出回信</div></div>
+      </div>`;
+    }
+    return `<div class="box">
+      <div style="font-size:11px;color:var(--rouge);">${chatSettings.companionName} · ${t}</div>
+      <div style="font-size:13px;margin-top:6px;white-space:pre-line;">${l.content}</div>
+      ${thread}${replyForm}
+    </div>`;
   }).join('') : '<div class="empty-note">TA 还没有主动寄过信来，什么时候想写全看TA自己</div>';
+}
+async function replyToInboxLetter(id){
+  const l = inboxLetters.find(x=>x.id===id);
+  if(!l || l.userReply) return;
+  const inp = document.getElementById('inboxReply_'+id);
+  if(!inp) return;
+  const text = inp.value.trim();
+  if(!text) return;
+  const hours = 10 + Math.random()*14; // 10~24 小时，和写信回信一致
+  l.userReply = text;
+  l.userReplyTime = Date.now();
+  l.botReplied = false;
+  l.botReplyContent = null;
+  l.botReplyTime = null;
+  l.scheduledBotReplyAt = Date.now() + hours*3600*1000;
+  await sSet('inbox-letters', inboxLetters);
+  renderInboxLetters();
+  scheduleInboxLetterBotReply(l.id, l.scheduledBotReplyAt - Date.now());
+}
+function scheduleInboxLetterBotReply(id, delayMs){
+  setTimeout(async ()=>{
+    const l = inboxLetters.find(x=>x.id===id);
+    if(!l || l.botReplied || !l.userReply) return;
+    const lineCount = 2 + Math.floor(Math.random()*3);
+    const lines = [];
+    for(let i=0;i<lineCount;i++){ const c = getRandomCardText(); if(c) lines.push(c); }
+    if(lines.length===0) return;
+    l.botReplyContent = lines.join('\n');
+    l.botReplyTime = Date.now();
+    l.botReplied = true;
+    await sSet('inbox-letters', inboxLetters);
+    if(currentView==='inboxLetters'){ renderInboxLetters(); }
+    else{ inboxLetterUnread = true; await sSet('inbox-letter-unread', true); renderUnreadDots(); }
+  }, Math.max(0, delayMs));
+}
+function resumeInboxLetterReplyTimers(){
+  inboxLetters.forEach(l=>{
+    if(l.userReply && !l.botReplied && typeof l.scheduledBotReplyAt === 'number'){
+      scheduleInboxLetterBotReply(l.id, l.scheduledBotReplyAt - Date.now());
+    }
+  });
 }
 
 /* ============================================================
@@ -4017,6 +4091,7 @@ function onImportBackupFile(e){
     renderRecipes(); renderDiary(); renderBeautify(); renderMoments(); renderLetters();
     renderInboxLetters(); renderCallLog(); renderLifePhotos(); renderTodayStatusHome();
     resumeLetterTimers();
+    resumeInboxLetterReplyTimers();
     await evaluatePetDays();
     if(currentView==='pet') renderPetPanel();
     alert('恢复完成');
