@@ -657,7 +657,7 @@
       <div class="fn-item" onclick="go('diary')"><div class="fn-icon">📔</div><div class="fn-label">日记</div></div>
       <div class="fn-item" onclick="go('ledger')"><div class="fn-icon">⏳</div><div class="fn-label">记账</div></div>
       <div class="fn-item" onclick="go('period')"><div class="fn-icon">☾</div><div class="fn-label">月经</div></div>
-      <div class="fn-item" onclick="go('recipe')"><div class="fn-icon">🧪</div><div class="fn-label">食谱</div></div>
+      <div class="fn-item" onclick="go('recipe')"><div class="fn-icon">🔮</div><div class="fn-label">占卜</div></div>
       <div class="fn-item" onclick="go('beautify')"><div class="fn-icon">✨</div><div class="fn-label">美化</div></div>
       <div class="fn-item" onclick="openPetFeature()"><div class="fn-icon">🐾</div><div class="fn-label">养成</div></div>
       <div class="fn-item" onclick="go('settings')"><div class="fn-icon">⚙️</div><div class="fn-label">设置</div></div>
@@ -711,9 +711,13 @@
     </div>
     <div id="outingBanner" class="outing-banner hidden"></div>
     <div class="food-chip-row" id="petFoodStrip"></div>
-    <div class="memory-label" style="margin-top:14px;">🗺 奇遇日记</div>
+    <div class="memory-label" style="margin-top:14px;cursor:pointer;user-select:none;" onclick="togglePetFold('adventure')">
+      🗺 奇遇日记 <span id="foldArrow-adventure" style="float:right;color:var(--ink-soft);">▼</span>
+    </div>
     <div class="adventure-log" id="adventureLog"></div>
-    <div class="memory-label" style="margin-top:14px;">🌙 梦角的照看</div>
+    <div class="memory-label" style="margin-top:14px;cursor:pointer;user-select:none;" onclick="togglePetFold('care')">
+      🌙 梦角的照看 <span id="foldArrow-care" style="float:right;color:var(--ink-soft);">▼</span>
+    </div>
     <div class="adventure-log" id="careLog"></div>
 
     <div class="diary-divider-line"></div>
@@ -726,7 +730,7 @@
 
     <div class="checkin-box">
       <div class="checkin-btn" id="petCheckinBtn" onclick="claimPetCheckin()">今日打卡</div>
-      <div class="checkin-hint">勾任务领小食品 · 打卡：开心+8 好感+6 成长+14（仅打卡加成长；漏打卡会昏倒）</div>
+      <div class="checkin-hint">勾任务领小食品 · 打卡：开心+8 好感+6 成长+14（漏一天昏倒，漏两天离开全属性归零；连续两天任务可复活，复活后开心/饱食为0）</div>
     </div>
   </section>
 
@@ -806,16 +810,29 @@
   <!-- ============ LEDGER 记账 ============ -->
   <section id="view-ledger" class="view hidden">
     <div class="view-head"><div class="icon-btn" onclick="go('home')">←</div><h2>记账</h2></div>
-    <div class="box">
-      <div class="box-title">余额 <span id="ledgerBalance" style="color:var(--rouge)">¥0.00</span></div>
-      <label class="field">日期</label><input type="date" id="ledgerDate">
-      <label class="field">类型</label>
-      <select id="ledgerType"><option value="expense">支出</option><option value="income">收入</option></select>
-      <label class="field">金额</label><input type="number" id="ledgerAmount" placeholder="0.00">
-      <label class="field">备注</label><input type="text" id="ledgerNote" placeholder="例如：奶茶">
-      <div class="btn-row"><div class="btn" onclick="addLedger()">添加一笔</div></div>
+    <div class="box" style="text-align:center;padding:12px 10px;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:18px;margin-bottom:12px;">
+        <span class="icon-btn" style="width:32px;height:32px;font-size:14px;" onclick="shiftLedgerMonth(-1)">‹</span>
+        <span id="ledgerMonthLabel" style="font-family:'Noto Serif SC',serif;font-weight:700;font-size:15px;letter-spacing:1px;">—</span>
+        <span class="icon-btn" style="width:32px;height:32px;font-size:14px;" onclick="shiftLedgerMonth(1)">›</span>
+      </div>
+      <div style="display:flex;justify-content:space-around;padding:12px 6px;border:1px solid var(--rule);border-radius:12px;background:var(--paper-2);">
+        <div><div style="font-size:11px;color:var(--ink-soft);">支出</div><div id="ledgerSumExpense" style="color:var(--rouge);font-weight:700;margin-top:4px;">¥0.00</div></div>
+        <div><div style="font-size:11px;color:var(--ink-soft);">收入</div><div id="ledgerSumIncome" style="color:#3B6B5E;font-weight:700;margin-top:4px;">¥0.00</div></div>
+        <div><div style="font-size:11px;color:var(--ink-soft);">结余</div><div id="ledgerSumBalance" style="font-weight:700;margin-top:4px;">¥0.00</div></div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:12px;justify-content:center;flex-wrap:wrap;">
+        <div class="btn outline" id="ledgerTab-expense" onclick="setLedgerTab('expense')" style="padding:6px 12px;font-size:12px;">↓ 支出</div>
+        <div class="btn outline" id="ledgerTab-income" onclick="setLedgerTab('income')" style="padding:6px 12px;font-size:12px;">↑ 收入</div>
+        <div class="btn outline" id="ledgerTab-stats" onclick="setLedgerTab('stats')" style="padding:6px 12px;font-size:12px;">◉ 统计</div>
+        <div class="btn outline" id="ledgerTab-tags" onclick="setLedgerTab('tags')" style="padding:6px 12px;font-size:12px;">🏷 标签</div>
+      </div>
     </div>
     <div id="ledgerList"></div>
+    <div class="btn-row" style="position:sticky;bottom:70px;background:var(--paper);padding:8px 0;margin-top:8px;">
+      <div class="btn outline" style="flex:1;" onclick="go('home')">← 返回</div>
+      <div class="btn rouge" style="flex:1.4;" onclick="openLedgerAddSheet()">＋ 添加记录</div>
+    </div>
   </section>
 
   <!-- ============ PERIOD 月经 ============ -->
@@ -863,31 +880,49 @@
 
   <!-- ============ RECIPE 食谱 ============ -->
   <section id="view-recipe" class="view hidden">
-    <div class="view-head"><div class="icon-btn" onclick="go('home')">←</div><h2>食谱</h2></div>
+    <div class="view-head"><div class="icon-btn" onclick="go('home')">←</div><h2>占卜抽牌</h2></div>
     <div class="box">
-      <label class="field">菜名</label><input type="text" id="recName">
-      <label class="field">食材</label><textarea id="recIng" placeholder="用逗号分隔"></textarea>
-      <label class="field">步骤</label><textarea id="recSteps"></textarea>
-      <div class="btn-row"><div class="btn" onclick="addRecipe()">添加食谱</div></div>
+      <p style="font-size:12.5px;color:var(--ink-soft);margin:0 0 10px;">正式模拟抽牌：先选牌组，再洗牌后从上抽三张（不放回）。正逆位纯随机。</p>
+      <label class="field">牌组</label>
+      <select id="divDeckType" onchange="onDivDeckChange()">
+        <option value="tarot78">塔罗 78 张（大阿卡纳 + 小阿卡纳）</option>
+        <option value="lenormand36">雷诺曼 36 张</option>
+      </select>
+      <label class="field">你的问题（可选）</label>
+      <textarea id="tarotQuestion" placeholder="例如：我最近的感情走向如何？ / 今天适合做什么？" style="min-height:64px;"></textarea>
+      <div class="btn-row">
+        <div class="btn outline" onclick="shuffleDivDeck()">🔀 重新洗牌</div>
+        <div class="btn rouge" onclick="drawTarotThree()">🃏 抽三张牌</div>
+      </div>
+      <div id="divDeckStatus" style="font-size:11.5px;color:var(--ink-soft);margin-top:8px;"></div>
     </div>
-    <div id="recipeList"></div>
+    <div id="tarotResult"></div>
+    <div class="btn-row" style="margin-top:12px;">
+      <div class="btn outline" onclick="go('divHistory')">🕮 占卜历史</div>
+    </div>
+  </section>
+
+  <!-- ============ DIV HISTORY 占卜历史 ============ -->
+  <section id="view-divHistory" class="view hidden">
+    <div class="view-head"><div class="icon-btn" onclick="go('recipe')">←</div><h2>占卜历史</h2></div>
+    <div id="divHistoryList"></div>
   </section>
 
   <!-- ============ DIARY 日记 ============ -->
   <section id="view-diary" class="view hidden">
-    <div class="view-head"><div class="icon-btn" onclick="go('home')">←</div><h2>日记</h2></div>
-    <div class="box">
-      <label class="field">日期</label><input type="date" id="diaryDate">
-      <label class="field">心情</label>
-      <select id="diaryMood">
-        <option value="🙂">🙂 平静</option><option value="😊">😊 开心</option>
-        <option value="🥲">🥲 emo</option><option value="😴">😴 疲惫</option>
-        <option value="🥰">🥰 心动</option>
-      </select>
-      <label class="field">内容</label><textarea id="diaryText"></textarea>
-      <div class="btn-row"><div class="btn" onclick="addDiary()">写下今天</div></div>
+    <div class="view-head"><div class="icon-btn" onclick="go('home')">←</div><h2>日记日历</h2></div>
+    <div class="box" style="padding:12px 10px;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:18px;margin-bottom:10px;">
+        <span class="icon-btn" style="width:32px;height:32px;font-size:14px;" onclick="shiftDiaryMonth(-1)">‹</span>
+        <span id="diaryMonthLabel" style="font-family:'Noto Serif SC',serif;font-weight:700;font-size:15px;">—</span>
+        <span class="icon-btn" style="width:32px;height:32px;font-size:14px;" onclick="shiftDiaryMonth(1)">›</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;font-size:11px;color:var(--ink-soft);margin-bottom:4px;">
+        <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+      </div>
+      <div id="diaryCalendarGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
     </div>
-    <div id="diaryList"></div>
+    <p style="font-size:12px;color:var(--ink-soft);text-align:center;margin:10px 0 0;">点某一天，写下心情、日记和今天吃了什么</p>
   </section>
 
   <!-- ============ BEAUTIFY 美化 ============ -->
@@ -1351,6 +1386,7 @@ async function init(){
   periodEntries = await sGet('period-entries', []);
   diaryEntries = await sGet('diary-entries', []);
   recipeEntries = await sGet('recipe-entries', []);
+  tarotHistory = await sGet('tarot-history', []);
   momentsPosts = await loadInitialPage('momentsPosts');
   letters = await sGet('letters', []);
   inboxLetters = await sGet('inbox-letters', []);
@@ -1445,9 +1481,8 @@ async function init(){
   document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') reevaluatePetOnResume(); });
   window.addEventListener('focus', reevaluatePetOnResume);
   setInterval(reevaluatePetOnResume, 5*60000);
-  document.getElementById('ledgerDate').valueAsDate = new Date();
-  document.getElementById('periodDate').valueAsDate = new Date();
-  document.getElementById('diaryDate').valueAsDate = new Date();
+  const periodEl = document.getElementById('periodDate');
+  if(periodEl) periodEl.valueAsDate = new Date();
 
   if(!hasReplyScheduled() ) maybeScheduleFromHistory();
 }
@@ -1456,7 +1491,7 @@ init();
 /* ============================================================
    NAV
    ============================================================ */
-const VIEW_TITLES = { home:'EVAN', chat:'传讯', cards:'字卡', ledger:'记账', period:'月经', settings:'设置', recipe:'食谱', diary:'日记', beautify:'美化', moments:'朋友圈', letters:'写信', inboxLetters:'来信', calls:'通话', petselect:'选宠物', pet:'饲养面板' };
+const VIEW_TITLES = { home:'EVAN', chat:'传讯', cards:'字卡', ledger:'记账', period:'月经', settings:'设置', recipe:'塔罗', divHistory:'占卜历史', diary:'日记', beautify:'美化', moments:'朋友圈', letters:'写信', inboxLetters:'来信', calls:'通话', petselect:'选宠物', pet:'饲养面板' };
 function go(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));
   document.getElementById('view-'+name).classList.remove('hidden');
@@ -1483,6 +1518,10 @@ function go(name){
   }
   if(name==='petselect'){ petPickChoice = null; renderPetPickGrid(); }
   if(name==='pet'){ renderPetPanel(); }
+  if(name==='ledger'){ renderLedger(); }
+  if(name==='diary'){ renderDiary(); }
+  if(name==='recipe'){ renderRecipes(); }
+  if(name==='divHistory'){ renderDivHistoryList(); }
 }
 function renderUnreadDots(){
   const cd = document.getElementById('chatDot'); if(cd) cd.classList.toggle('hidden', !chatUnread);
@@ -1813,7 +1852,7 @@ function resolveFoodKey(key){
 const PET_FORMS = {
   cat:    ['🥚','🐱','😺','😸','🐈','🐈'],
   dog:    ['🥚','🐶','🐕','🐕','🦮','🦮'],
-  rabbit: ['🥚','🐰','🐰','🐇','🐇','🐇'],
+  rabbit: ['🥚','🐰','🐰','🐇','🐇','🐇','在沙发缝里找到一颗陈年小零食。','用后脚敲地板宣布自己是兔界明星。','把你的书角啃出一个小心形缺口。','在阳光格子里打了个迷你呵欠。'],
   chick:  ['🥚','🐣','🐤','🐤','🐥','🐔'],
   fox:    ['🥚','🦊','🦊','🦊','🦊','🦊'],
   bear:   ['🥚','🧸','🧸','🐻','🐻','🐻']
@@ -1840,15 +1879,15 @@ function renderPetAvatar(animalKey, level, sizePx){
   return `<span style="font-size:${fs}px;line-height:1;display:block;text-align:center;">${emoji}</span>`;
 }
 const PET_ADVENTURES = {
-  cat: ['在屋顶上走了走，俯瞰整条街，觉得自己像小王子。','追着光点跳来跳去，最后发现是窗户反光。','钻进纸箱蹲了很久，出来顶着一团灰。','对壁虎盯梢半天，壁虎先眨眼认输了。','在暖气旁烤肚皮，差点睡着。','把你的鞋带打了好几个死结。','半夜对着月亮叫了一声，自己也被吓到。','在窗台想象如果自己会飞。','捡到毛线团滚得到处都是。','躲在窗帘后偷袭影子，大获全胜。','跟镜子里的自己对视点了点头。','在花盆边埋了颗小石子当宝藏。','被雨滴打到鼻子，继续优雅走路。','闻遍街花，认定你身上最好闻。'],
-  dog: ['在公园把球追丢了，但交到三个新朋友。','对邮差汪两声又摇尾巴示好。','踩水坑溅一身泥还超得意。','帮老爷爷捡回被风吹走的帽子。','闻了十二根电线杆记下朋友圈。','被小朋友摸头开心得转圈。','在草地打滚变成草屑狗。','跟着慢跑的人跑，自己先喘不上气。','守护长椅上的背包直到主人回来。','对着影子叫到影子消失。','捡到好树枝决定送给你。','在湖边研究鸭子游泳。','迷路三分钟靠鼻子嗅回家。','遇见酷狗互相闻完成了兄弟。'],
+  cat: ['在屋顶上走了走，俯瞰整条街，觉得自己像小王子。','追着光点跳来跳去，最后发现是窗户反光。','钻进纸箱蹲了很久，出来顶着一团灰。','对壁虎盯梢半天，壁虎先眨眼认输了。','在暖气旁烤肚皮，差点睡着。','把你的鞋带打了好几个死结。','半夜对着月亮叫了一声，自己也被吓到。','在窗台想象如果自己会飞。','捡到毛线团滚得到处都是。','躲在窗帘后偷袭影子，大获全胜。','跟镜子里的自己对视点了点头。','在花盆边埋了颗小石子当宝藏。','被雨滴打到鼻子，继续优雅走路。','闻遍街花，认定你身上最好闻。','在阳台盯着飞鸟发了很久呆，鸟飞走了才回神。','把纸袋套在头上撞到桌脚，还装作若无其事。','偷亲了你的水杯，舌头上沾到一滴水。','在键盘上踩出一串乱码，好像写了封情书。'],
+  dog: ['在公园把球追丢了，但交到三个新朋友。','对邮差汪两声又摇尾巴示好。','踩水坑溅一身泥还超得意。','帮老爷爷捡回被风吹走的帽子。','闻了十二根电线杆记下朋友圈。','被小朋友摸头开心得转圈。','在草地打滚变成草屑狗。','跟着慢跑的人跑，自己先喘不上气。','守护长椅上的背包直到主人回来。','对着影子叫到影子消失。','捡到好树枝决定送给你。','在湖边研究鸭子游泳。','迷路三分钟靠鼻子嗅回家。','遇见酷狗互相闻完成了兄弟。','把落叶当成飞盘咬住不放。','雨天用身体挡泥水溅到你鞋上，自己成了泥狗。','对每一辆路过的自行车都友好地摇尾巴。','把最喜欢的球推到你脚边，眼神写着再玩一次。'],
   rabbit: ['在草地蹦出一串小心形脚印。','发现三叶草咬一小口甜甜的。','竖起耳朵听见很远的车铃。','和蝴蝶对视然后一起跳舞。','躲进灌木当了十分钟小间谍。','把胡萝卜味空气吸得满满的。','在落叶堆挖洞挖到一半去晒太阳。','被落叶砸中脑袋装作无事。','跟着气球跑一段气球飞走了。','在花田打盹醒来满身花瓣。','后腿站着够叶子差点仰倒。','安静地看了很久圆月亮。','吹散蒲公英许了个小愿望。','碰见另一只兔子用耳朵打招呼。'],
-  chick: ['跟着蚂蚁队列走，当自己是探险家。','啄到亮晶晶小石子以为是谷子。','展开翅膀试飞十厘米成就达成。','在水洼照镜子确认今天很可爱。','对蚯蚓说你好它钻回土里了。','被风吹转圈羽毛乱了还开心。','跟麻雀学合唱走调也不在乎。','在花圃找到一粒谷子珍重收下。','看见影子变大觉得自己长大了。','躲进落叶玩捉迷藏。','对着日出叫一声为新一天打卡。','被蝴蝶当成同伴围着转。','用小爪子在沙地划出歪歪的心。','站在最高石头上宣布占领小山头。'],
-  fox: ['在林间小道像执行秘密任务。','发现红果子闻了闻留给你。','和影子赛跑险胜。','在溪边拍水玩水花四溅。','爬上树桩当了五分钟小国王。','听见远处狗叫判断方位后离开。','收集三片枫叶夹在心里。','对月亮眨眼月亮好像也眨了。','穿过雾草地觉得自己像传说狐狸。','跟松鼠对峙三秒双方撤退。','在空地打滚毛更蓬松了。','发现手套围着转了两圈。','顺着风跑感觉快要飞起来。','在桥洞躲雨听雨打河面。'],
+  chick: ['跟着蚂蚁队列走，当自己是探险家。','啄到亮晶晶小石子以为是谷子。','展开翅膀试飞十厘米成就达成。','在水洼照镜子确认今天很可爱。','对蚯蚓说你好它钻回土里了。','被风吹转圈羽毛乱了还开心。','跟麻雀学合唱走调也不在乎。','在花圃找到一粒谷子珍重收下。','看见影子变大觉得自己长大了。','躲进落叶玩捉迷藏。','对着日出叫一声为新一天打卡。','被蝴蝶当成同伴围着转。','用小爪子在沙地划出歪歪的心。','站在最高石头上宣布占领小山头。','跟着你的脚步一颠一颠，差点踩到你的鞋。','把羽毛抖得蓬松，像穿了件小羽绒服。','对倒影鞠躬，以为是新朋友。','在窗台合唱清晨的第一声叽。'],
+  fox: ['在林间小道像执行秘密任务。','发现红果子闻了闻留给你。','和影子赛跑险胜。','在溪边拍水玩水花四溅。','爬上树桩当了五分钟小国王。','听见远处狗叫判断方位后离开。','收集三片枫叶夹在心里。','对月亮眨眼月亮好像也眨了。','穿过雾草地觉得自己像传说狐狸。','跟松鼠对峙三秒双方撤退。','在空地打滚毛更蓬松了。','发现手套围着转了两圈。','顺着风跑感觉快要飞起来。','在桥洞躲雨听雨打河面。','把落叶藏进尾巴当装饰。','在石板路数自己的脚印。','假装看不见你，其实侧眼偷瞄。','把发现的松果整齐排成一排。'],
   bear: ['找到果树仰头看了很久。','树荫下睡觉瓢虫停在鼻子上。','追蝴蝶摔个屁股墩自己先笑了。','下河洗澡湿漉漉晃水珠回家。','帮忙挪开挡路小树枝。','对橱窗蜂蜜罐望眼欲穿。','和树桩抱了抱当好朋友。','落叶上走沙沙响给自己配BGM。','看小鱼游过浅滩看了好久。','野花插耳后马上掉了。','学蜜蜂嗡嗡把真蜜蜂吓跑。','山坡上滚一圈晕乎乎但快乐。','爪子在泥里画圆说是家的方向。','遇见徒步的人友好地挥爪子。']
 };
 const PET_LEVEL_QUOTES = {
-  cat: ['喵……好像又懂了一点点爱。','尾巴尖都在发光呢。','再高一点的窗台也能跳上去了。','你的膝枕是我最喜欢的领地。','从今往后我也是能独当一面的猫了。'],
+  cat: ['喵……好像又懂了一点点爱。','尾巴尖都在发光呢。','再高一点的窗台也能跳上去了。','你的膝枕是我最喜欢的领地。','从今往后我也是能独当一面的猫了。','把掉落的松果捡起来当手球玩。','在树桩上坐得端端正正，像在开会。','用鼻子拱开草丛找虫子看。','把你落下的围巾拱回你脚边。'],
   dog: ['汪！又变强了一点点！','能更好地守护你了。','尾巴要摇成螺旋桨啦！','和你一起的日子是最棒的训练。','我是你最可靠的伙伴！'],
   rabbit: ['蹦得更高了呢。','耳朵里装满了喜欢你的话。','软软的心又长大了一圈。','三叶草许的愿好像实现了。','我是你的幸运兔。'],
   chick: ['叽！升级成功！','羽毛更亮了，心也是。','小小的身体大大的勇气。','想飞到你心里最软的地方。','我是你养大的小太阳。'],
@@ -1979,6 +2018,10 @@ function normalizePetLevel(pet){
     if(pet.dead === undefined) pet.dead = false;
     if(pet.reviveProgress === undefined) pet.reviveProgress = 0;
     if(pet.reviveLastDate === undefined) pet.reviveLastDate = null;
+    if(pet.outingRollDate === undefined) pet.outingRollDate = null;
+    if(pet.outingAllowedToday === undefined) pet.outingAllowedToday = false;
+    if(pet.outingUsedToday === undefined) pet.outingUsedToday = false;
+    if(pet.lastOutingDate === undefined) pet.lastOutingDate = null;
     return;
   }
   if(pet.stage === 0 || (!pet.stage && !(pet.growth>0))){ pet.level = 0; pet.growth = pet.growth||0; }
@@ -1995,6 +2038,10 @@ function normalizePetLevel(pet){
   if(pet.dead === undefined) pet.dead = false;
   if(pet.reviveProgress === undefined) pet.reviveProgress = 0;
   if(pet.reviveLastDate === undefined) pet.reviveLastDate = null;
+  if(pet.outingRollDate === undefined) pet.outingRollDate = null;
+  if(pet.outingAllowedToday === undefined) pet.outingAllowedToday = false;
+  if(pet.outingUsedToday === undefined) pet.outingUsedToday = false;
+  if(pet.lastOutingDate === undefined) pet.lastOutingDate = null;
 }
 function tryPetLevelUp(pet){
   if(!pet) return false;
@@ -2130,29 +2177,47 @@ async function evaluatePetDays(){
   const lastCheck = petState.lastCheckinDate || null;
   petState.pets.forEach(pet=>{
     normalizePetLevel(pet);
-    if(pet.dead) return;
+    // 已离开：全属性保持 0、取消出门；救援若断天则进度清零
+    if(pet.dead){
+      pet.happiness = 0; pet.hunger = 0; pet.favor = 0;
+      pet.outing = null;
+      if(pet.reviveLastDate && pet.reviveLastDate !== today){
+        const gap = daysBetween(pet.reviveLastDate, today);
+        if(gap > 1) pet.reviveProgress = 0;
+      }
+      return;
+    }
     if(days>0){
       pet.happiness = Math.max(0, (pet.happiness??0) - 25*days);
-      // 饱食度随天数下降，需要喂食维持（原逻辑用 max(40,x) 只会把数值往上封底，从不下降）
       pet.hunger = Math.max(0, (pet.hunger??40) - 20*days);
     }
-    // 孵化后的宠物：按「上次打卡」判断有没有漏天
     if(pet.level > 0 && lastCheck !== today){
-      // 从未打卡：以出生日/上次打开推算
       const ref = lastCheck || pet.bornDate || petState.lastOpenDate || today;
-      const gap = daysBetween(ref, today); // 距今天数
-      // gap>=1：至少隔了一整天没打卡 → 昏倒；累计缺口
+      const gap = daysBetween(ref, today);
       if(gap >= 1){
         pet.fainted = true;
         pet.missCheckinDays = Math.max(pet.missCheckinDays||0, gap);
       }
       if((pet.missCheckinDays||0) >= 2){
+        // 离开：开心/饱食/好感全归零，禁止一切功能（含出门）
         pet.dead = true;
         pet.fainted = false;
+        pet.happiness = 0;
+        pet.hunger = 0;
+        pet.favor = 0;
+        pet.outing = null;
+        pet.outingAllowedToday = false;
+        pet.outingUsedToday = false;
       }
     }
     if(pet.cleanDate !== today){
       pet.cleanDate = today; pet.bathLeft = 3; pet.cuddleLeft = 3;
+    }
+    // 每天只掷一次出门机会：约 30% 的日子有机会，有机会也最多出一次
+    if(pet.level > 0 && !pet.dead && !pet.fainted && pet.outingRollDate !== today){
+      pet.outingRollDate = today;
+      pet.outingUsedToday = false;
+      pet.outingAllowedToday = Math.random() < 0.30;
     }
   });
   petState.lastOpenDate = today;
@@ -2223,10 +2288,15 @@ async function claimPetCheckin(){
       if(pet.reviveProgress >= 2){
         pet.dead = false; pet.fainted = false; pet.missCheckinDays = 0;
         pet.reviveProgress = 0; pet.reviveLastDate = null;
-        pet.happiness = 50; pet.hunger = 50;
+        // 复活后：开心、饱食归零，好感度保留
+        pet.happiness = 0;
+        pet.hunger = 0;
+        pet.outing = null;
+        pet.outingAllowedToday = false;
+        pet.outingUsedToday = false;
         await sSet('pet-state', petState);
         renderPetPanel();
-        showPetToast(`🎉 ${pet.name} 醒过来了，欢迎TA回来！`);
+        showPetToast(`🎉 ${pet.name} 醒过来了！开心和饱食需要重新照顾，好感还在～`);
       } else {
         await sSet('pet-state', petState);
         renderPetPanel();
@@ -2259,7 +2329,8 @@ async function claimPetCheckin(){
 function openPetFeedSheet(){
   const pet = getActivePet(); if(!pet) return;
   normalizePetLevel(pet);
-  if(pet.dead){ showPetToast(`${pet.name} 已经离开了……`); return; }
+  const blocked = petActionBlocked(pet);
+  if(blocked){ showPetToast(blocked); return; }
   if(isPetOut(pet)){ showPetToast(`${pet.name} 还在外面，等回来再喂～`); return; }
   const rows = Object.keys(PET_FOODS).map(key=>{
     const f = PET_FOODS[key];
@@ -2279,13 +2350,15 @@ function openPetFeedSheet(){
 }
 async function feedPet(key){
   const pet = getActivePet(); if(!pet) return;
+  normalizePetLevel(pet);
+  const blocked = petActionBlocked(pet);
+  if(blocked){ showPetToast(blocked); return; }
   key = resolveFoodKey(key);
   const count = (petState.foodInventory && petState.foodInventory[key]) || 0;
   if(count<=0) return;
   const f = PET_FOODS[key];
   if(!f) return;
   petState.foodInventory[key] = count-1;
-  normalizePetLevel(pet);
   let hatched = false;
   // 喂食只回饱食/开心/少许好感，不增加成长；蛋喂一次仍可破壳
   if(pet.level === 0){
@@ -2309,6 +2382,8 @@ async function feedPet(key){
 async function petTouchPet(){
   const pet = getActivePet(); if(!pet) return;
   normalizePetLevel(pet);
+  const blocked = petActionBlocked(pet);
+  if(blocked){ showPetToast(blocked); return; }
   const block = petStatusBlock(pet); if(block){ showPetToast(block); return; }
   if(isPetOut(pet)){ showPetToast(`${pet.name} 还在外面～`); return; }
   if(!pet.level){ showPetToast('蛋还没孵化呢，先去喂点吃的吧～'); return; }
@@ -2322,6 +2397,8 @@ async function petTouchPet(){
 async function petCuddlePet(){
   const pet = getActivePet(); if(!pet) return;
   normalizePetLevel(pet);
+  const blocked = petActionBlocked(pet);
+  if(blocked){ showPetToast(blocked); return; }
   const block = petStatusBlock(pet); if(block){ showPetToast(block); return; }
   if(isPetOut(pet)){ showPetToast(`${pet.name} 还在外面～`); return; }
   if(!pet.level){ showPetToast('蛋还没孵化呢，先去喂点吃的吧～'); return; }
@@ -2339,6 +2416,8 @@ async function petCuddlePet(){
 function openPetCleanSheet(){
   const pet = getActivePet(); if(!pet) return;
   normalizePetLevel(pet);
+  const blocked = petActionBlocked(pet);
+  if(blocked){ showPetToast(blocked); return; }
   if(isPetOut(pet)){ showPetToast(`${pet.name} 还在外面～`); return; }
   const bathLeft = pet.bathLeft??3;
   openOverlay(`<div class="box-title">🛁 清洁方式<span class="icon-btn" onclick="closeOverlay()">✕</span></div>
@@ -2350,6 +2429,8 @@ function openPetCleanSheet(){
 async function petCleanAction(type){
   const pet = getActivePet(); if(!pet) return;
   normalizePetLevel(pet);
+  const blocked = petActionBlocked(pet);
+  if(blocked){ showPetToast(blocked); return; }
   if(isPetOut(pet) || !pet.level){ showPetToast(isPetOut(pet)?`${pet.name} 还在外面～`:'蛋还没孵化呢～'); return; }
   let tip='';
   if(type==='wipe'){ pet.happiness=Math.min(100,(pet.happiness||0)+4); pet.favor=Math.min(100,(pet.favor||0)+1); tip='开心+4 好感+1'; }
@@ -2372,11 +2453,22 @@ function petStatusBlock(pet){
   if(pet.fainted) return `${pet.name} 昏倒了，先完成今日任务并打卡叫醒TA`;
   return null;
 }
+/** 离开 / 昏倒 时禁止互动（含出门）；离开只能靠两天任务救援 */
+function petActionBlocked(pet){
+  if(!pet) return '没有宠物';
+  normalizePetLevel(pet);
+  if(pet.dead) return `${pet.name} 已经离开了……完成两天每日任务才能唤醒`;
+  if(pet.fainted) return `${pet.name} 昏倒了，先完成今日任务并打卡叫醒TA`;
+  return null;
+}
 async function sendPetOuting(){
   const pet = getActivePet(); if(!pet) return;
   normalizePetLevel(pet);
+  const blocked = petActionBlocked(pet);
+  if(blocked){ showPetToast(blocked); return; }
   if(pet.level===0){ showPetToast('蛋还不能出门啦～'); return; }
   if(isPetOut(pet)){ showPetToast(`${pet.name} 还在外面～`); return; }
+  // 手动出门不限制次数；自动出门仍受每日随机机会约束
   const duration = 60*60*1000;
   pet.outing = { departedAt: Date.now(), returnAt: Date.now()+duration, byUser: true };
   await sSet('pet-state', petState); renderPetPanel();
@@ -2388,6 +2480,7 @@ async function completePetOuting(petId){
   const pet = (petState.pets||[]).find(p=>p.id===petId);
   if(!pet || !pet.outing) return;
   if(Date.now() < pet.outing.returnAt){ scheduleOutingReturn(petId, pet.outing.returnAt-Date.now()); return; }
+  if(pet.dead){ pet.outing = null; await sSet('pet-state', petState); return; }
   const story = pickPetAdventure(pet.animal);
   const byUser = !!pet.outing.byUser;
   pet.outing = null;
@@ -2404,8 +2497,20 @@ async function completePetOuting(petId){
 async function maybeAutoPetOuting(){
   const pet = getActivePet(); if(!pet) return;
   normalizePetLevel(pet);
-  if(pet.level===0 || isPetOut(pet) || (pet.happiness||0)<40 || Math.random()>0.06) return;
+  if(pet.dead || pet.fainted) return;
+  if(pet.level===0 || isPetOut(pet) || (pet.happiness||0)<40) return;
+  const today = todayKey();
+  if(pet.outingRollDate !== today){
+    pet.outingRollDate = today;
+    pet.outingUsedToday = false;
+    pet.outingAllowedToday = Math.random() < 0.30;
+  }
+  if(!pet.outingAllowedToday || pet.outingUsedToday || pet.lastOutingDate === today) return;
+  if(Math.random() > 0.25) return;
   pet.outing = { departedAt:Date.now(), returnAt:Date.now()+60*60*1000, byUser:false };
+  pet.outingUsedToday = true;
+  pet.lastOutingDate = today;
+  pet.outingAllowedToday = false;
   await sSet('pet-state', petState);
   if(currentView==='pet') renderPetPanel();
   scheduleOutingReturn(pet.id, 60*60*1000);
@@ -2434,6 +2539,7 @@ function scheduleNextCompanionCare(){
 async function companionCarePet(){
   const pet = getActivePet(); if(!pet) return;
   normalizePetLevel(pet);
+  if(pet.dead || pet.fainted) return;
   if(pet.level===0 || isPetOut(pet)) return;
   const act = CARE_ACTIONS[Math.floor(Math.random()*CARE_ACTIONS.length)];
   pet.happiness = Math.min(100,(pet.happiness||0)+act.happy);
@@ -2537,6 +2643,7 @@ function renderPetPanel(){
       ? list.slice(0,8).map(c=>`<div class="adventure-item"><div class="meta">${c.emoji||'🌙'} ${new Date(c.time).toLocaleString('zh-CN')} · ${c.effect||''}</div>${c.text}</div>`).join('')
       : `<div class="empty-note">${cname} 还没来过，会在 5天～1个月里随机来照看</div>`;
   }
+  applyPetFoldUI();
   const foodWrap = document.getElementById('petFoodStrip');
   if(foodWrap){
     foodWrap.innerHTML = Object.keys(PET_FOODS).map(k=>{
@@ -3690,15 +3797,49 @@ async function sendRedPacket(){
 /* ============================================================
    LEDGER
    ============================================================ */
+let ledgerUI = { year: new Date().getFullYear(), month: new Date().getMonth(), tab: 'expense' };
+function shiftLedgerMonth(delta){
+  let y = ledgerUI.year, m = ledgerUI.month + delta;
+  if(m < 0){ m = 11; y--; }
+  if(m > 11){ m = 0; y++; }
+  ledgerUI.year = y; ledgerUI.month = m;
+  renderLedger();
+}
+function setLedgerTab(tab){
+  ledgerUI.tab = tab;
+  renderLedger();
+}
+function ledgerMonthEntries(){
+  const y = ledgerUI.year, m = ledgerUI.month;
+  return ledgerEntries.filter(e=>{
+    const d = new Date(e.date + 'T00:00:00');
+    return d.getFullYear()===y && d.getMonth()===m;
+  });
+}
+function openLedgerAddSheet(presetType){
+  const type = presetType || (ledgerUI.tab==='income' ? 'income' : 'expense');
+  const today = new Date().toISOString().slice(0,10);
+  openOverlay(`
+    <div class="drawer-head"><h3>添加记录</h3><span class="close-x" onclick="closeOverlay()">✕</span></div>
+    <label class="field">日期</label><input type="date" id="ledgerDate" value="${today}">
+    <label class="field">类型</label>
+    <select id="ledgerType"><option value="expense" ${type==='expense'?'selected':''}>支出</option><option value="income" ${type==='income'?'selected':''}>收入</option></select>
+    <label class="field">金额</label><input type="number" id="ledgerAmount" placeholder="0.00" step="0.01">
+    <label class="field">备注</label><input type="text" id="ledgerNote" placeholder="例如：奶茶">
+    <label class="field">标签（可选）</label><input type="text" id="ledgerTag" placeholder="例如：餐饮 / 交通">
+    <div class="btn-row"><div class="btn rouge" onclick="addLedger()">保存</div><div class="btn outline" onclick="closeOverlay()">取消</div></div>
+  `);
+}
 async function addLedger(){
   const date = document.getElementById('ledgerDate').value;
   const type = document.getElementById('ledgerType').value;
   const amount = parseFloat(document.getElementById('ledgerAmount').value);
   const note = document.getElementById('ledgerNote').value.trim();
-  if(!date || isNaN(amount)){ alert('请填写日期和金额'); return; }
-  ledgerEntries.unshift({id:uid(), date, type, amount, note});
+  const tag = (document.getElementById('ledgerTag')||{}).value ? document.getElementById('ledgerTag').value.trim() : '';
+  if(!date || isNaN(amount) || amount<=0){ alert('请填写日期和正确金额'); return; }
+  ledgerEntries.unshift({id:uid(), date, type, amount, note, tag});
   await sSet('ledger-entries', ledgerEntries);
-  document.getElementById('ledgerAmount').value=''; document.getElementById('ledgerNote').value='';
+  closeOverlay();
   renderLedger();
 }
 async function deleteLedger(id){
@@ -3706,12 +3847,64 @@ async function deleteLedger(id){
   await sSet('ledger-entries', ledgerEntries); renderLedger();
 }
 function renderLedger(){
-  const total = ledgerEntries.reduce((sum,e)=> sum + (e.type==='income'? e.amount : -e.amount), 0);
-  document.getElementById('ledgerBalance').textContent = '¥'+total.toFixed(2);
+  const label = document.getElementById('ledgerMonthLabel');
+  if(label) label.textContent = `${ledgerUI.year}年${ledgerUI.month+1}月`;
+  ['expense','income','stats','tags'].forEach(t=>{
+    const el = document.getElementById('ledgerTab-'+t);
+    if(el) el.className = 'btn' + (ledgerUI.tab===t ? '' : ' outline');
+    if(el) el.style.padding = '6px 12px';
+    if(el) el.style.fontSize = '12px';
+  });
+  const monthItems = ledgerMonthEntries();
+  const expense = monthItems.filter(e=>e.type==='expense').reduce((s,e)=>s+e.amount,0);
+  const income = monthItems.filter(e=>e.type==='income').reduce((s,e)=>s+e.amount,0);
+  const balance = income - expense;
+  const se = document.getElementById('ledgerSumExpense');
+  const si = document.getElementById('ledgerSumIncome');
+  const sb = document.getElementById('ledgerSumBalance');
+  if(se) se.textContent = '¥'+expense.toFixed(2);
+  if(si) si.textContent = '¥'+income.toFixed(2);
+  if(sb){ sb.textContent = '¥'+balance.toFixed(2); sb.style.color = balance>=0 ? '#3B6B5E' : 'var(--rouge)'; }
+
   const wrap = document.getElementById('ledgerList');
-  wrap.innerHTML = ledgerEntries.length ? ledgerEntries.map(e=>`
-    <div class="list-item"><div><b style="color:${e.type==='income'?'#3B6B5E':'var(--rouge)'}">${e.type==='income'?'+':'-'}¥${e.amount.toFixed(2)}</b><div class="meta">${e.date} ${e.note||''}</div></div><span class="del" onclick="deleteLedger('${e.id}')">✕</span></div>`).join('')
-    : '<div class="empty-note">还没有账目记录</div>';
+  if(!wrap) return;
+  const tab = ledgerUI.tab;
+  if(tab==='stats'){
+    const byTag = {};
+    monthItems.forEach(e=>{
+      const k = e.tag || (e.type==='income'?'收入':'未分类');
+      if(!byTag[k]) byTag[k] = {expense:0, income:0};
+      byTag[k][e.type] += e.amount;
+    });
+    const rows = Object.keys(byTag).map(k=>{
+      const t = byTag[k];
+      return `<div class="list-item"><div><b>${k}</b><div class="meta">支出 ¥${t.expense.toFixed(2)} · 收入 ¥${t.income.toFixed(2)}</div></div></div>`;
+    });
+    wrap.innerHTML = rows.length ? rows.join('') : '<div class="empty-note">本月暂无统计数据</div>';
+    return;
+  }
+  if(tab==='tags'){
+    const tags = {};
+    ledgerEntries.forEach(e=>{ if(e.tag) tags[e.tag] = (tags[e.tag]||0)+1; });
+    const keys = Object.keys(tags);
+    wrap.innerHTML = keys.length
+      ? keys.map(t=>`<div class="list-item"><div>🏷 ${t}<div class="meta">共 ${tags[t]} 笔</div></div></div>`).join('')
+      : '<div class="empty-note">还没有标签，添加记录时可填写</div>';
+    return;
+  }
+  const list = monthItems.filter(e=> e.type === tab).sort((a,b)=> b.date.localeCompare(a.date) || (b.id>a.id?1:-1));
+  if(!list.length){
+    wrap.innerHTML = `<div class="empty-note" style="padding:36px 12px;">
+      <div style="font-size:40px;opacity:.35;margin-bottom:8px;">🧾</div>
+      暂无${tab==='expense'?'支出':'收入'}记录<br><span style="font-size:11.5px;">点击下方按钮添加记录</span>
+    </div>`;
+    return;
+  }
+  wrap.innerHTML = list.map(e=>`
+    <div class="list-item"><div>
+      <b style="color:${e.type==='income'?'#3B6B5E':'var(--rouge)'}">${e.type==='income'?'+':'-'}¥${Number(e.amount).toFixed(2)}</b>
+      <div class="meta">${e.date}${e.tag?' · '+e.tag:''}${e.note?' · '+e.note:''}</div>
+    </div><span class="del" onclick="deleteLedger('${e.id}')">✕</span></div>`).join('');
 }
 
 /* ============================================================
@@ -3750,27 +3943,324 @@ function renderPeriod(){
 /* ============================================================
    RECIPE
    ============================================================ */
-async function addRecipe(){
-  const name = document.getElementById('recName').value.trim();
-  const ingredients = document.getElementById('recIng').value.trim();
-  const steps = document.getElementById('recSteps').value.trim();
-  if(!name){ alert('请填写菜名'); return; }
-  recipeEntries.unshift({id:uid(), name, ingredients, steps});
-  await sSet('recipe-entries', recipeEntries);
-  document.getElementById('recName').value=''; document.getElementById('recIng').value=''; document.getElementById('recSteps').value='';
-  renderRecipes();
+/* ============================================================
+   占卜：塔罗 78 / 雷诺曼 36 —— 洗牌后纯随机抽三张（不放回）
+   ============================================================ */
+function buildTarot78(){
+  const major = [
+    ['愚者','🃏','新的开始，怀抱信任与好奇心迈出未知的一步；心态轻盈，愿意冒险尝试。','行动前的犹豫、鲁莽冒进或害怕承担后果而裹足不前；也提醒你没找到自由与责任的平衡。'],
+    ['魔术师','🪄','手上已具备需要的资源与能力，重点在于集中意志、主动出击，把想法落地成行动。','才华被浪费、三心二意或有所隐瞒；也可能是明明有能力却不敢施展的自我怀疑。'],
+    ['女祭司','🌙','倾听直觉与潜意识的低语，先沉淀、观察，不急于表态，答案往往在静默中浮现。','忽视内心声音、过度理性化情绪，或对真相选择回避；也暗示信息尚未完全浮出水面。'],
+    ['女皇','🌸','丰盛、滋养与创造力的展现，感情与生活都在被温柔地照料着，适合让爱与美自然流淌。','过度付出导致耗竭、依赖他人肯定，或创造力被压抑；也反映对自我价值感的怀疑。'],
+    ['皇帝','👑','建立秩序、划定边界，用稳固的结构和责任感撑起局面，理性主导胜过情绪化。','控制欲过强、固执僵化，或权威结构正在松动；也可能是缺乏纪律、方向感缺失。'],
+    ['教皇','📿','依循传统、寻求可信赖的指引，从既有的智慧、制度或值得信任的人身上获得支持。','质疑教条、打破常规寻找自己的路，也提示墨守成规带来的束缚感。'],
+    ['恋人','💕','一次重要的选择或联结，诚实面对自己的心意，让关系建立在真实而非将就之上。','关系中的错位、犹豫不决或价值观冲突；也可能是逃避一个必须做出的选择。'],
+    ['战车','🏎️','意志力清晰、目标明确，凭借决心与掌控力排除干扰、勇往直前。','方向失控、内耗严重或过于急躁冒进；也可能是外部阻力让前进停滞。'],
+    ['力量','🦁','以温柔而坚定的方式驯服内心的恐惧与冲动，真正的力量来自耐心与自我接纳。','自我怀疑、情绪失控或压抑真实感受；也可能是滥用强硬手段而非柔性引导。'],
+    ['隐者','🏮','退回内在，独处沉思，给答案和洞见留出浮现的时间，无需急着向外求助。','过度孤立、逃避人群，或是该走出封闭、主动寻求连接的时候了。'],
+    ['命运之轮','🎡','周期性的转折正在发生，顺应变化的节奏，把握机运比强行掌控更有效。','感觉运气不站在自己这边、变化带来阻滞，或是抗拒不可避免的转变。'],
+    ['正义','⚖️','因果分明，诚实面对事实并做出公正的决定，一切都会得到应有的清算。','不公平、逃避责任或决策失衡；也可能是尚未看清全貌就妄下判断。'],
+    ['倒吊人','🙃','换一个角度看问题，主动的等待和暂停本身也是一种酝酿与蓄力。','无谓的牺牲、停滞不前带来的焦躁，或是抗拒必要的暂停与放手。'],
+    ['死神','🦋','一个阶段的结束为新事物腾出空间，放手旧模式才能让转化真正发生。','抗拒改变、执着于已经结束的关系或阶段，导致停滞与内耗。'],
+    ['节制','🍷','在两个极端之间寻求平衡与调和，耐心地把冲突的部分慢慢融合成新的整体。','失衡、过度或不足，缺乏耐心导致的冲突与不协调。'],
+    ['恶魔','⛓️','看清自己被什么样的执念、欲望或关系模式所束缚，直面阴影才能松开枷锁。','开始挣脱束缚、觉察到有害的依附关系，迈出解放自己的第一步。'],
+    ['塔','⚡','突如其来的震动打破了虚假的稳固，让被掩盖的真相浮出水面，随后才能重建。','逃避不可避免的崩塌、恐惧改变，或是余震未平、还在消化冲击。'],
+    ['星星','⭐','风暴过后重新燃起的希望与信任，温柔地疗愈自己，相信更好的正在靠近。','信心受挫、对未来感到迷茫，或是希望被现实一再消磨。'],
+    ['月亮','🌕','直觉活跃但真相朦胧不清，容易被情绪、幻觉或未知的恐惧牵着走，需谨慎分辨。','幻象逐渐澄清、隐藏的焦虑浮出水面，也可能是走出了一段困惑期。'],
+    ['太阳','☀️','明朗、喜悦与真实的成功，允许自己毫无保留地感受被看见的快乐。','短暂的阴霾遮住了本该有的光彩，也可能是过度乐观而忽略了细节。'],
+    ['审判','📯','一次觉醒的召唤，回顾过去做出总结，回应内心真正想要奔赴的方向。','自我评判过重、逃避该有的反思，或是难以放下过去的遗憾。'],
+    ['世界','🌍','一个完整周期的圆满收束，努力得到确认，也意味着新阶段即将展开。','事情尚未真正完结、缺乏收尾感，或是达成目标后仍感觉空虚。']
+  ].map(([name,emoji,mean,rmean])=>({ name, emoji, mean, rmean, suit:'大阿卡纳' }));
+
+  const suits = [
+    { suit:'权杖', emoji:'🔥', theme:'行动、热情、创造', rtheme:'行动受阻、冲动内耗或热情消退' },
+    { suit:'圣杯', emoji:'💧', theme:'情感、关系、直觉', rtheme:'情感淤堵、逃避感受或自我怀疑' },
+    { suit:'宝剑', emoji:'⚔️', theme:'思维、冲突、真相', rtheme:'思维混乱、言语伤人或过度防御' },
+    { suit:'星币', emoji:'🪙', theme:'物质、身体、现实', rtheme:'现实卡顿、匮乏焦虑或过度执着物质' }
+  ];
+  const ranks = [
+    ['王牌','全新的种子与潜能，一个纯粹而强烈的开端。','起步受阻、错失良机，或是能量还未准备好释放。'],
+    ['二','面临对峙或选择，需要在两者之间权衡取舍。','犹豫不决、关系失衡，或是逃避该做的决定。'],
+    ['三','初步的成果显现，合作与表达带来正向反馈。','团队摩擦、成果被延误，或缺乏认可带来的失落。'],
+    ['四','稳定下来，筑起一个可以喘息与扎根的空间。','停滞太久、安逸中藏着隐忧，或基础出现裂缝。'],
+    ['五','竞争、冲突或失落浮出水面，考验应对的方式。','冲突升级或选择逃避对抗，也可能是危机后的收尾。'],
+    ['六','过渡期中分享或短暂的胜利，气氛趋于缓和。','旧事重提、不对等的付出，或是迟来的认可。'],
+    ['七','需要坚持立场，防守当下已经拥有的成果。','力不从心、过度防备，或是该放弃无谓的坚持。'],
+    ['八','事情快速推进，变化接连而来，节奏加快。','进展受阻、延迟，或是方向感变得混乱。'],
+    ['九','接近完成，也带着疲惫，需要留一口气坚持。','身心俱疲、过度警惕，或是濒临崩溃边缘。'],
+    ['十','抵达顶点，收获与负担同时压在肩上。','不堪重负、该放下却仍在硬撑。'],
+    ['侍从','消息传来，带着稚嫩而真诚的学习心态。','消息延误、不成熟的判断，或是三分钟热度。'],
+    ['骑士','主动出击，带着热忱甚至急切地追求目标。','行动冲动鲁莽，或是半途而废、缺乏耐心。'],
+    ['王后','以成熟包容的姿态照料他人，也滋养自己。','情绪化、过度付出耗竭自己，或是缺乏安全感。'],
+    ['国王','承担起统领的责任，用外在权威稳住局面。','专断、滥用权力，或是责任缺位带来的失控。']
+  ];
+  const minors = [];
+  suits.forEach(s=>{
+    ranks.forEach(([rank, tip, rtip])=>{
+      minors.push({
+        name: s.suit + rank,
+        emoji: s.emoji,
+        mean: s.theme + ' · ' + tip,
+        rmean: s.rtheme + ' · ' + rtip,
+        suit: s.suit
+      });
+    });
+  });
+  return major.concat(minors);
 }
-async function deleteRecipe(id){
-  recipeEntries = recipeEntries.filter(r=>r.id!==id);
-  await sSet('recipe-entries', recipeEntries); renderRecipes();
+
+function buildLenormand36(){
+  const cards = [
+    ['骑士','🐴','消息、访客或机会正在到来，事情将以较快的节奏向前推进。'],
+    ['三叶草','🍀','小而短暂的幸运，抓住眼前轻巧的机会，不必想得太复杂。'],
+    ['船','⛵','远行、跨越距离的联系，或一笔关于贸易与移动的进展。'],
+    ['房子','🏠','家庭与稳定的根基，一个可以安放归属感的私密领域。'],
+    ['树','🌳','健康与成长的根基，需要时间慢慢扎深、不能急于求成。'],
+    ['云','☁️','局势模糊不清、情绪阴晴不定，真相还没有完全显现。'],
+    ['蛇','🐍','局面复杂多绕，可能涉及诱惑、第三方或需要小心的关系。'],
+    ['棺材','⚰️','一个阶段彻底结束，释放旧事物才能让转变真正发生。'],
+    ['花束','💐','美好的邀请与欣赏正在靠近，值得被好好接收的心意。'],
+    ['镰刀','🗡️','突然的切断、决断的时刻，可能是收获也可能是风险。'],
+    ['鞭子','🪢','反复出现的摩擦或争执，需要正视而不是任由其发酵。'],
+    ['鸟','🐦','闲谈、焦虑或琐碎的信息交流，注意不要被小事扰乱心绪。'],
+    ['孩子','🧒','纯真、天真的新开始，一件事情还处在稚嫩的起步阶段。'],
+    ['狐狸','🦊','需要一些策略与精明，别把真实意图完全摆在明面上。'],
+    ['熊','🐻','权威、保护或压力的来源，力量集中在某一方手中。'],
+    ['星星','✨','清晰的希望与指引，灵感正在为下一步照亮方向。'],
+    ['鹳','🦩','正在发生的过渡与搬迁，旧的状态即将被新的取代。'],
+    ['狗','🐶','忠诚可靠的陪伴，一段值得信赖的友情或支持关系。'],
+    ['塔','🏛️','制度、边界或孤立的处境，也可能象征更高更远的视角。'],
+    ['花园','🌳','公开的社交场合，人际网络与外界关注在此汇聚。'],
+    ['山','⛰️','明显的阻碍与延迟，前方有一段需要翻越的坎坷。'],
+    ['十字路口','🛤️','面临选择与分岔，决定将带来不同的走向。'],
+    ['老鼠','🐭','悄悄的损耗与流失，无论是精力、金钱还是安全感。'],
+    ['心','❤️','情感的核心所在，一份真心实意，围绕爱与在意展开。'],
+    ['戒指','💍','承诺与契约，一段循环或已经确立的关系状态。'],
+    ['书','📖','尚未公开的秘密，或是需要学习、钻研的知识领域。'],
+    ['信','✉️','具体的信息、文件或书面往来，答案往往就在文字里。'],
+    ['男人','👨','一位男性角色，或偏外在、主动的行动力量。'],
+    ['女人','👩','一位女性角色，或偏内在、接收与感受的力量。'],
+    ['百合','🤍','成熟的和谐与平和，事情正走向安稳而不喧闹的状态。'],
+    ['太阳','🌞','活力、成功与显化，事情正朝着明朗的方向发展。'],
+    ['月亮','🌛','声誉与情绪的潮汐，你正被看见，也在意着被如何看待。'],
+    ['钥匙','🔑','关键的答案即将开启，一个长期悬而未决的问题有解了。'],
+    ['鱼','🐟','金钱与资源的流动，收入或机会正在循环起来。'],
+    ['锚','⚓','稳定的工作与长期的承诺，值得托付时间与心力。'],
+    ['十字','✝️','责任与负担并存，带着命运感的必经考验。']
+  ];
+  return cards.map(([name,emoji,mean])=>({ name, emoji, mean, suit:'雷诺曼' }));
 }
+
+const DIV_DECKS = {
+  tarot78: { label:'塔罗 78 张', build: buildTarot78, hasReversal: true },
+  lenormand36: { label:'雷诺曼 36 张', build: buildLenormand36, hasReversal: false }
+};
+
+let divState = {
+  deckType: 'tarot78',
+  shuffled: [],   // 当前洗好的牌堆（顶=可抽）
+  drawnIds: []    // 本轮已抽，防止重复（用 name+index）
+};
+
+function fisherYates(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    const t = a[i]; a[i]=a[j]; a[j]=t;
+  }
+  return a;
+}
+
+function getActiveDivDeckDef(){
+  return DIV_DECKS[divState.deckType] || DIV_DECKS.tarot78;
+}
+
+function ensureDivDeckShuffled(force){
+  const def = getActiveDivDeckDef();
+  if(force || !divState.shuffled.length){
+    const base = def.build().map((c,i)=>({ ...c, _id: c.name + '#' + i }));
+    divState.shuffled = fisherYates(base);
+    divState.drawnIds = [];
+  }
+  updateDivDeckStatus();
+}
+
+function updateDivDeckStatus(){
+  const el = document.getElementById('divDeckStatus');
+  if(!el) return;
+  const def = getActiveDivDeckDef();
+  const left = divState.shuffled.length;
+  el.textContent = `当前：${def.label} · 牌堆剩余 ${left} 张 · 抽牌为纯随机洗牌后依次取顶牌`;
+}
+
+function onDivDeckChange(){
+  const sel = document.getElementById('divDeckType');
+  if(sel) divState.deckType = sel.value;
+  ensureDivDeckShuffled(true);
+  const wrap = document.getElementById('tarotResult');
+  if(wrap) wrap.innerHTML = '<div class="empty-note">已切换牌组并重新洗牌，可以抽三张了</div>';
+}
+
+function shuffleDivDeck(){
+  ensureDivDeckShuffled(true);
+  showPetToast ? null : null;
+  const toast = document.getElementById('saveToast');
+  if(toast){
+    toast.textContent = '已重新洗牌';
+    toast.classList.add('show');
+    setTimeout(()=>toast.classList.remove('show'), 1200);
+  }
+  updateDivDeckStatus();
+}
+
+const TAROT_POSITIONS = [
+  { key:'past', title:'第一张 · 过去 / 现状' },
+  { key:'present', title:'第二张 · 现在 / 建议' },
+  { key:'future', title:'第三张 · 走向 / 答案' }
+];
+
+async function drawTarotThree(){
+  ensureDivDeckShuffled(false);
+  const def = getActiveDivDeckDef();
+  if(divState.shuffled.length < 3){
+    // 不够三张就整副再洗一次
+    ensureDivDeckShuffled(true);
+  }
+  if(divState.shuffled.length < 3){
+    alert('牌组异常，请重新洗牌');
+    return;
+  }
+  // 从牌堆顶部依次取三张（不放回）——模拟真实抽牌
+  const drawn = [];
+  for(let i=0;i<3;i++){
+    const card = divState.shuffled.shift();
+    const reversed = def.hasReversal ? (Math.random() < 0.5) : false; // 正逆纯 50/50
+    drawn.push({
+      name: card.name,
+      emoji: card.emoji,
+      suit: card.suit || '',
+      mean: card.mean,
+      reversed,
+      position: TAROT_POSITIONS[i].title,
+      note: reversed
+        ? ('逆位：' + (card.rmean || (card.mean + ' —— 能量受阻、内收或需要反向理解。')))
+        : ('正位：' + card.mean)
+    });
+  }
+  updateDivDeckStatus();
+  const qEl = document.getElementById('tarotQuestion');
+  const question = qEl ? qEl.value.trim() : '';
+  const reading = {
+    id: uid(),
+    time: Date.now(),
+    deck: def.label,
+    question: question || '今日运势',
+    cards: drawn
+  };
+  // 先把结果显示出来，再尝试持久化——即使存储失败（比如通过 content:// 方式打开、
+  // 或者 IndexedDB 暂时不可用），本次抽牌结果依然能正常看到解析。
+  renderTarotResult(reading);
+  try{
+    tarotHistory.unshift(reading);
+    if(tarotHistory.length > 20) tarotHistory = tarotHistory.slice(0,20);
+    await sSet('tarot-history', tarotHistory);
+  }catch(err){
+    console.error('保存占卜历史失败：', err);
+  }
+  if(currentView === 'divHistory') renderDivHistoryList();
+}
+
+function renderTarotResult(reading){
+  const wrap = document.getElementById('tarotResult');
+  if(!wrap || !reading) return;
+  wrap.innerHTML = `<div class="box">
+    <div class="box-title">本次解读 · ${reading.deck||''}</div>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:10px;">问题：${reading.question}</div>
+    ${reading.cards.map(c=>`
+      <div style="border:1px solid var(--rule);padding:12px;margin-bottom:10px;background:var(--paper-2);">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <span style="font-family:'Noto Serif SC',serif;font-weight:700;">${c.emoji} ${c.name}${c.reversed?'（逆位）':''}</span>
+          <span class="stamp-tag" style="transform:none;flex-shrink:0;">${c.position}</span>
+        </div>
+        ${c.suit?`<div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">${c.suit}</div>`:''}
+        <div style="font-size:13px;margin-top:8px;line-height:1.55;">${c.note}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+let divHistoryOpenId = null; // 当前展开查看解析的那一条历史记录 id
+
+function toggleDivHistoryDetail(id){
+  divHistoryOpenId = (divHistoryOpenId === id) ? null : id;
+  renderDivHistoryList();
+}
+
+function renderDivHistoryList(){
+  const wrap = document.getElementById('divHistoryList');
+  if(!wrap) return;
+  wrap.innerHTML = tarotHistory.length ? tarotHistory.map(r=>{
+    const names = (r.cards||[]).map(c=>c.name+(c.reversed?'（逆位）':'')).join(' · ');
+    const isOpen = divHistoryOpenId === r.id;
+    const detail = isOpen ? `
+      <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--rule);">
+        ${(r.cards||[]).map(c=>`
+          <div style="border:1px solid var(--rule);padding:10px;margin-bottom:8px;background:var(--paper-2);">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+              <span style="font-family:'Noto Serif SC',serif;font-weight:700;">${c.emoji||''} ${c.name}${c.reversed?'（逆位）':''}</span>
+              <span class="stamp-tag" style="transform:none;flex-shrink:0;">${c.position||''}</span>
+            </div>
+            ${c.suit?`<div style="font-size:11px;color:var(--ink-soft);margin-top:4px;">${c.suit}</div>`:''}
+            <div style="font-size:13px;margin-top:8px;line-height:1.55;">${c.note}</div>
+          </div>`).join('')}
+      </div>` : '';
+    return `<div class="list-item" style="display:block;cursor:pointer;" onclick="toggleDivHistoryDetail('${r.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div><b>${r.question}</b><div class="meta">${new Date(r.time).toLocaleString('zh-CN')} · ${r.deck||''} · ${names}</div></div>
+        <span class="del" onclick="event.stopPropagation();deleteTarotReading('${r.id}')">✕</span>
+      </div>
+      ${detail}
+    </div>`;
+  }).join('') : '<div class="empty-note">还没有抽过牌，去占卜抽牌页面试试吧</div>';
+}
+
+async function deleteTarotReading(id){
+  tarotHistory = tarotHistory.filter(r=>r.id!==id);
+  if(divHistoryOpenId === id) divHistoryOpenId = null;
+  if(currentView === 'divHistory') renderDivHistoryList();
+  try{
+    await sSet('tarot-history', tarotHistory);
+  }catch(err){
+    console.error('保存占卜历史失败：', err);
+  }
+}
+
 function renderRecipes(){
-  const wrap = document.getElementById('recipeList');
-  wrap.innerHTML = recipeEntries.length ? recipeEntries.map(r=>`
-    <div class="box"><div class="box-title">${r.name}<span class="del" onclick="deleteRecipe('${r.id}')">✕</span></div>
-    <div style="font-size:12.5px;color:var(--ink-soft);">食材：${r.ingredients||'—'}</div>
-    <div style="font-size:12.5px;margin-top:6px;">${(r.steps||'').replace(/\\n/g,'<br>')}</div></div>`).join('')
-    : '<div class="empty-note">还没有食谱</div>';
+  const sel = document.getElementById('divDeckType');
+  if(sel) sel.value = divState.deckType || 'tarot78';
+  ensureDivDeckShuffled(false);
+  const wrap = document.getElementById('tarotResult');
+  if(wrap && !wrap.innerHTML.trim()){
+    wrap.innerHTML = '<div class="empty-note">洗牌后抽三张，模拟正式占卜</div>';
+  }
+}
+function addRecipe(){ drawTarotThree(); }
+
+/* ---------- 宠物：奇遇 / 照看 可折叠 ---------- */
+let petFoldState = { adventure: false, care: false }; // false=默认收起
+function togglePetFold(key){
+  petFoldState[key] = !petFoldState[key];
+  const log = document.getElementById(key==='adventure' ? 'adventureLog' : 'careLog');
+  const arrow = document.getElementById('foldArrow-'+key);
+  if(log) log.style.display = petFoldState[key] ? '' : 'none';
+  if(arrow) arrow.textContent = petFoldState[key] ? '▼' : '▶';
+}
+function applyPetFoldUI(){
+  ['adventure','care'].forEach(key=>{
+    const log = document.getElementById(key==='adventure' ? 'adventureLog' : 'careLog');
+    const arrow = document.getElementById('foldArrow-'+key);
+    if(log) log.style.display = petFoldState[key] ? '' : 'none';
+    if(arrow) arrow.textContent = petFoldState[key] ? '▼' : '▶';
+  });
 }
 
 /* ============================================================
@@ -4088,25 +4578,103 @@ function resumeInboxLetterReplyTimers(){
 /* ============================================================
    DIARY
    ============================================================ */
-async function addDiary(){
-  const date = document.getElementById('diaryDate').value;
-  const mood = document.getElementById('diaryMood').value;
-  const text = document.getElementById('diaryText').value.trim();
-  if(!date || !text){ alert('请填写日期和内容'); return; }
-  diaryEntries.unshift({id:uid(), date, mood, text});
-  await sSet('diary-entries', diaryEntries);
-  document.getElementById('diaryText').value='';
+const DIARY_MOODS = ['😀','😊','🥰','😍','😌','🙂','🤔','🥲','😢','😭','😤','😡','😴','🤒','🥳','😎','🥺','😳','🫠','💔','💕','✨','🌸','☕','🌧️','☀️'];
+let diaryUI = { year: new Date().getFullYear(), month: new Date().getMonth() };
+function shiftDiaryMonth(delta){
+  let y = diaryUI.year, m = diaryUI.month + delta;
+  if(m < 0){ m = 11; y--; }
+  if(m > 11){ m = 0; y++; }
+  diaryUI.year = y; diaryUI.month = m;
   renderDiary();
 }
+function diaryKey(y,m,d){
+  return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+function diaryByDate(dateStr){
+  return diaryEntries.filter(d=>d.date===dateStr);
+}
+function openDiaryDay(dateStr){
+  const existing = diaryByDate(dateStr);
+  const latest = existing[0];
+  const curMood = latest ? latest.mood : '🙂';
+  const moodOptions = DIARY_MOODS.map(m=>`<span class="chip diary-mood-chip" data-mood="${m}" onclick="selectDiaryMood(this)" style="font-size:20px;padding:6px 8px;${m===curMood?'background:var(--blush);border-color:var(--rouge);':''}">${m}</span>`).join('');
+  openOverlay(`
+    <div class="drawer-head"><h3>${dateStr}</h3><span class="close-x" onclick="closeOverlay()">✕</span></div>
+    <label class="field">今日心情</label>
+    <div id="diaryMoodPicker" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">${moodOptions}</div>
+    <input type="hidden" id="diaryMood" value="${curMood}">
+    <label class="field">日记</label>
+    <textarea id="diaryText" placeholder="写下这一天…" style="min-height:90px;"></textarea>
+    <label class="field">今天吃了什么</label>
+    <textarea id="diaryFood" placeholder="早餐 / 午餐 / 晚餐 / 零食…" style="min-height:56px;"></textarea>
+    <div class="btn-row">
+      <div class="btn" onclick="saveDiaryDay('${dateStr}')">保存</div>
+      ${latest ? `<div class="btn outline" onclick="deleteDiary('${latest.id}')">删除</div>` : ''}
+      <div class="btn outline" onclick="closeOverlay()">取消</div>
+    </div>
+  `);
+  const ta = document.getElementById('diaryText');
+  const food = document.getElementById('diaryFood');
+  if(ta && latest) ta.value = latest.text || '';
+  if(food && latest) food.value = latest.food || '';
+}
+function selectDiaryMood(el){
+  document.querySelectorAll('.diary-mood-chip').forEach(c=>{ c.style.background=''; c.style.borderColor=''; });
+  el.style.background = 'var(--blush)';
+  el.style.borderColor = 'var(--rouge)';
+  document.getElementById('diaryMood').value = el.dataset.mood;
+}
+async function saveDiaryDay(dateStr){
+  const mood = document.getElementById('diaryMood').value || '🙂';
+  const textVal = document.getElementById('diaryText').value.trim();
+  const food = document.getElementById('diaryFood') ? document.getElementById('diaryFood').value.trim() : '';
+  if(!textVal && !food){ alert('写点日记或记下吃了什么再保存吧'); return; }
+  const existing = diaryByDate(dateStr);
+  if(existing.length){
+    existing[0].mood = mood;
+    existing[0].text = textVal;
+    existing[0].food = food;
+  } else {
+    diaryEntries.unshift({id:uid(), date: dateStr, mood, text: textVal, food});
+  }
+  await sSet('diary-entries', diaryEntries);
+  closeOverlay();
+  renderDiary();
+}
+async function addDiary(){ openDiaryDay(todayKey()); }
 async function deleteDiary(id){
   diaryEntries = diaryEntries.filter(d=>d.id!==id);
-  await sSet('diary-entries', diaryEntries); renderDiary();
+  await sSet('diary-entries', diaryEntries);
+  closeOverlay();
+  renderDiary();
 }
 function renderDiary(){
-  const wrap = document.getElementById('diaryList');
-  wrap.innerHTML = diaryEntries.length ? diaryEntries.map(d=>`
-    <div class="list-item"><div>${d.mood} <b>${d.date}</b><div class="meta">${d.text}</div></div><span class="del" onclick="deleteDiary('${d.id}')">✕</span></div>`).join('')
-    : '<div class="empty-note">还没有日记，写下今天发生的事吧</div>';
+  const label = document.getElementById('diaryMonthLabel');
+  if(label) label.textContent = `${diaryUI.year}年${diaryUI.month+1}月`;
+  const grid = document.getElementById('diaryCalendarGrid');
+  if(!grid) return;
+  const y = diaryUI.year, m = diaryUI.month;
+  const firstDow = new Date(y, m, 1).getDay();
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+  const today = todayKey();
+  let html = '';
+  for(let i=0;i<firstDow;i++) html += '<div></div>';
+  for(let d=1;d<=daysInMonth;d++){
+    const key = diaryKey(y,m,d);
+    const entries = diaryByDate(key);
+    const mood = entries[0] ? entries[0].mood : '';
+    const isToday = key===today;
+    const has = entries.length>0;
+    html += `<div onclick="openDiaryDay('${key}')" style="
+      aspect-ratio:1;border:1px solid ${isToday?'var(--rouge)':(has?'var(--ink)':'var(--rule)')};
+      background:${has?'var(--blush)':(isToday?'var(--paper-2)':'var(--paper)')};
+      border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      cursor:pointer;font-size:12px;padding:2px;">
+      <div style="font-weight:${isToday?'700':'400'};">${d}</div>
+      <div style="font-size:14px;line-height:1.1;min-height:16px;">${mood||''}</div>
+    </div>`;
+  }
+  grid.innerHTML = html;
 }
 
 /* ============================================================
@@ -4146,7 +4714,7 @@ async function saveProfile(){
 }
 async function resetAll(){
   if(!confirm('确定要清空全部数据吗？这个操作无法撤销。')) return;
-  const keys = ['profile','chat-settings','chat-messages','cards-data','ledger-entries','period-entries','diary-entries','recipe-entries','theme-settings','moments-posts','letters','inbox-letters','call-logs','proactive-state','chat-unread','letter-unread','inbox-letter-unread','moments-unread','life-photos','status-pool','today-status','custom-bubble-css','rec-store-migrated-v2','pet-state','pet-tasks','moyu-state','proactive-msg-settings','splice-cards-enabled'];
+  const keys = ['profile','chat-settings','chat-messages','cards-data','ledger-entries','period-entries','diary-entries','recipe-entries','theme-settings','moments-posts','letters','inbox-letters','call-logs','proactive-state','chat-unread','letter-unread','inbox-letter-unread','moments-unread','life-photos','status-pool','today-status','custom-bubble-css','rec-store-migrated-v2','pet-state','pet-tasks','moyu-state','proactive-msg-settings','splice-cards-enabled','tarot-history'];
   for(const k of keys){
     try{ if(hasCloudStorage()) await window.storage.delete(k, false); }catch(e){}
     try{ localStorage.removeItem('EVAN:'+k); }catch(e){}
@@ -4165,7 +4733,7 @@ async function exportBackup(){
   ]);
   const data = {
     profile, chatSettings, chatMessages: fullChat, cardsData, ledgerEntries, periodEntries,
-    diaryEntries, recipeEntries, momentsPosts: fullMoments, letters, inboxLetters, callLogs, themeSettings, proactiveState,
+    diaryEntries, recipeEntries, tarotHistory, momentsPosts: fullMoments, letters, inboxLetters, callLogs, themeSettings, proactiveState,
     lifePhotos: fullPhotos, statusPool, todayStatus, customBubbleCSS, petState, petTasks, moyuState, proactiveMsgSettings, spliceCardsEnabled,
     exportedAt: Date.now()
   };
@@ -4195,6 +4763,7 @@ function onImportBackupFile(e){
     periodEntries = data.periodEntries || [];
     diaryEntries = data.diaryEntries || [];
     recipeEntries = data.recipeEntries || [];
+    tarotHistory = data.tarotHistory || [];
     const importedMoments = data.momentsPosts || [];
     letters = data.letters || [];
     inboxLetters = data.inboxLetters || [];
@@ -4217,6 +4786,7 @@ function onImportBackupFile(e){
     await sSet('period-entries', periodEntries);
     await sSet('diary-entries', diaryEntries);
     await sSet('recipe-entries', recipeEntries);
+    await sSet('tarot-history', tarotHistory);
     await sSet('letters', letters);
     await sSet('inbox-letters', inboxLetters);
     await sSet('call-logs', callLogs);
