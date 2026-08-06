@@ -1342,7 +1342,7 @@ let moyuState = {
   nextAt: null
 };
 // 主动消息：开关 + 固定间隔（分钟，实际会在附近随机浮动一点）
-let proactiveMsgSettings = { enabled: true, minMinutes: 5, maxMinutes: 4320 }; // 默认 5 分钟 ~ 3 天
+let proactiveMsgSettings = { enabled: true, minMinutes: 1, maxMinutes: 60 }; // 默认 1 分钟 ~ 1 小时，滑条上限 5 小时
 // 拼字卡：开启后回复会随机把多张字卡拼成一段再发
 let spliceCardsEnabled = false;
 let petState = { pet: null };
@@ -1422,17 +1422,19 @@ async function init(){
     delete moyuState.records;
   }
   proactiveMsgSettings = await sGet('proactive-msg-settings', proactiveMsgSettings);
-  // 兼容旧版单滑条 intervalMinutes
+  // 兼容旧版，并限制在 1~300 分钟（5小时）
   if(typeof proactiveMsgSettings.minMinutes !== 'number' || typeof proactiveMsgSettings.maxMinutes !== 'number'){
     if(typeof proactiveMsgSettings.intervalMinutes === 'number'){
       const base = proactiveMsgSettings.intervalMinutes;
-      proactiveMsgSettings.minMinutes = Math.max(1, Math.round(base * 0.5));
-      proactiveMsgSettings.maxMinutes = Math.max(proactiveMsgSettings.minMinutes, Math.round(base * 2));
+      proactiveMsgSettings.minMinutes = Math.max(1, Math.min(300, Math.round(base * 0.5)));
+      proactiveMsgSettings.maxMinutes = Math.max(proactiveMsgSettings.minMinutes, Math.min(300, Math.round(base * 2)));
     } else {
-      proactiveMsgSettings.minMinutes = 5;
-      proactiveMsgSettings.maxMinutes = 4320; // 3 天
+      proactiveMsgSettings.minMinutes = 1;
+      proactiveMsgSettings.maxMinutes = 60;
     }
   }
+  proactiveMsgSettings.minMinutes = Math.max(1, Math.min(300, proactiveMsgSettings.minMinutes));
+  proactiveMsgSettings.maxMinutes = Math.max(proactiveMsgSettings.minMinutes, Math.min(300, proactiveMsgSettings.maxMinutes));
   if(typeof proactiveMsgSettings.enabled !== 'boolean') proactiveMsgSettings.enabled = true;
   spliceCardsEnabled = await sGet('splice-cards-enabled', false);
   resumeMoyuSchedule();
@@ -2831,6 +2833,18 @@ function loadDemoCards(){
 let cardSelectMode = false;
 let selectedCardIdx = new Set();
 let _cardSelectMap = [];
+let cardsCollapsed = {}; // 记录每个分组是否折叠
+let cardsSearchKeyword = '';
+
+function toggleGroupCollapse(g){
+  cardsCollapsed[g] = !cardsCollapsed[g];
+  renderCardsView();
+}
+function onCardsSearchInput(){
+  const inp = document.getElementById('cardsSearchInput');
+  cardsSearchKeyword = (inp && inp.value || '').trim().toLowerCase();
+  renderCardsView();
+}
 function renderCardsView(){
   const wrap = document.getElementById('cardsGroupsList');
   const btn = document.getElementById('cardSelectModeBtn');
@@ -2838,6 +2852,13 @@ function renderCardsView(){
   const groups = Object.keys(cardsData.groups||{});
   if(groups.length===0){ wrap.innerHTML = '<div class="empty-note">还没有导入字卡，先在上面导入 JSON 文件，或载入示例数据看看效果。</div>'; return; }
   _cardSelectMap = [];
+
+  // 搜索框
+  const searchHtml = `
+    <div class="box" style="margin-bottom:10px;">
+      <input type="text" id="cardsSearchInput" placeholder="搜索字卡内容…" value="${cardsSearchKeyword.replace(/"/g,'&quot;')}" oninput="onCardsSearchInput()" style="width:100%;">
+    </div>`;
+
   const toolbarHtml = cardSelectMode ? `
     <div class="box" style="position:sticky; top:0; z-index:5;">
       <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:8px;">已选 ${selectedCardIdx.size} 张</div>
@@ -2846,28 +2867,54 @@ function renderCardsView(){
         <div class="btn rouge" onclick="deleteSelectedCards()">删除选中</div>
       </div>
     </div>` : '';
+
   const groupsHtml = groups.map(g=>{
-    const cards = cardsData.groups[g];
+    let cards = cardsData.groups[g] || [];
+    // 搜索过滤
+    if(cardsSearchKeyword){
+      cards = cards.filter(c => c.toLowerCase().includes(cardsSearchKeyword));
+      if(cards.length === 0) return ''; // 该分组无匹配则隐藏
+    }
+    const collapsed = !!cardsCollapsed[g];
     const pills = cards.map((c,i)=>{
+      // 注意：过滤后 i 是过滤后的索引，编辑/删除时需要用原索引，这里简化处理，搜索时禁用编辑删除
       if(cardSelectMode){
         const idx = _cardSelectMap.length;
         _cardSelectMap.push({group:g, text:c});
         const checked = selectedCardIdx.has(idx);
         return `<span class="card-pill ${checked?'selected':''}" onclick="toggleCardSelect(${idx})">${checked?'☑':'☐'} ${c}</span>`;
       }
-      return `<span class="card-pill">${c}<span class="del" style="margin-left:6px;opacity:.65;" onclick="editCardText('${escAttr(g)}',${i})">✎</span><span class="del" style="margin-left:4px;" onclick="deleteCard('${escAttr(g)}',${i})">✕</span></span>`;
+      if(cardsSearchKeyword){
+        return `<span class="card-pill">${c}</span>`;
+      }
+      // 找到原索引
+      const realIdx = (cardsData.groups[g]||[]).indexOf(c);
+      return `<span class="card-pill">${c}<span class="del" style="margin-left:6px;opacity:.65;" onclick="editCardText('${escAttr(g)}',${realIdx})">✎</span><span class="del" style="margin-left:4px;" onclick="deleteCard('${escAttr(g)}',${realIdx})">✕</span></span>`;
     }).join('');
+
     return `<div class="group-block">
-      <div class="group-name"><span onclick="renameGroup('${escAttr(g)}')" style="cursor:pointer;border-bottom:1px dashed var(--rule);" title="点击改名">${g}（${cards.length}）</span>${cardSelectMode?'':`<span style="display:flex;gap:10px;align-items:center;"><span class="del" onclick="renameGroup('${escAttr(g)}')" style="opacity:.75;">✎ 改名</span><span class="del" onclick="deleteGroup('${escAttr(g)}')">✕ 删除分组</span></span>`}</div>
-      ${pills}
-      ${cardSelectMode?'':`
-      <div style="margin-top:8px;display:flex;gap:6px;">
-        <input type="text" id="addcard-${escAttr(g)}" placeholder="给这个分组新增一条字卡" style="flex:1;">
-        <div class="btn outline" style="padding:8px 12px;" onclick="addCardTo('${escAttr(g)}')">加</div>
-      </div>`}
+      <div class="group-name" style="cursor:pointer;user-select:none;" onclick="toggleGroupCollapse('${escAttr(g)}')">
+        <span style="margin-right:6px;">${collapsed ? '▶' : '▼'}</span>
+        <span style="border-bottom:1px dashed var(--rule);">${g}（${cards.length}${cardsSearchKeyword ? ' 匹配' : ''}）</span>
+        ${cardSelectMode?'':`<span style="display:flex;gap:10px;align-items:center;margin-left:auto;" onclick="event.stopPropagation()">
+          <span class="del" onclick="renameGroup('${escAttr(g)}')" style="opacity:.75;">✎ 改名</span>
+          <span class="del" onclick="deleteGroup('${escAttr(g)}')">✕ 删除分组</span>
+        </span>`}
+      </div>
+      <div class="group-content" style="${collapsed ? 'display:none;' : ''}">
+        ${pills}
+        ${cardSelectMode || cardsSearchKeyword ? '' : `
+        <div style="margin-top:8px;">
+          <textarea id="addcard-${escAttr(g)}" placeholder="批量添加（每行一条，自动去重）" style="width:100%;min-height:60px;resize:vertical;"></textarea>
+          <div class="btn-row" style="margin-top:6px;">
+            <div class="btn outline" style="padding:8px 12px;" onclick="addCardTo('${escAttr(g)}')">批量添加</div>
+          </div>
+        </div>`}
+      </div>
     </div>`;
   }).join('');
-  wrap.innerHTML = toolbarHtml + groupsHtml;
+
+  wrap.innerHTML = searchHtml + toolbarHtml + groupsHtml;
 }
 function toggleCardSelectMode(){
   cardSelectMode = !cardSelectMode;
@@ -2964,9 +3011,32 @@ async function deleteCard(g, idx){
 }
 async function addCardTo(g){
   const inp = document.getElementById('addcard-'+g);
-  const val = inp.value.trim(); if(!val) return;
-  cardsData.groups[g].push(val); inp.value='';
-  await sSet('cards-data', cardsData); renderCardsView();
+  if(!inp) return;
+  const raw = inp.value.trim();
+  if(!raw) return;
+  // 支持批量：按行拆分，自动去重
+  const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if(!lines.length) return;
+  if(!cardsData.groups[g]) cardsData.groups[g] = [];
+  const existing = new Set(cardsData.groups[g]);
+  let added = 0;
+  lines.forEach(line => {
+    if(!existing.has(line)){
+      cardsData.groups[g].push(line);
+      existing.add(line);
+      added++;
+    }
+  });
+  inp.value = '';
+  await sSet('cards-data', cardsData);
+  renderCardsView();
+  if(added > 0){
+    const tip = document.createElement('div');
+    tip.textContent = `已添加 ${added} 条`;
+    tip.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:8px 16px;border-radius:20px;font-size:13px;z-index:999;';
+    document.body.appendChild(tip);
+    setTimeout(() => tip.remove(), 1500);
+  }
 }
 async function addGroupManual(){
   const inp = document.getElementById('newGroupName');
@@ -3290,8 +3360,8 @@ function scheduleNextProactiveMsg(){
     return;
   }
   // 纯随机：在最短～最长之间任意挑一个时间，没有“中心值小幅浮动”
-  const lo = Math.max(1, Math.min(proactiveMsgSettings.minMinutes||5, proactiveMsgSettings.maxMinutes||4320));
-  const hi = Math.max(lo, Math.max(proactiveMsgSettings.minMinutes||5, proactiveMsgSettings.maxMinutes||4320));
+  const lo = Math.max(1, Math.min(300, Math.min(proactiveMsgSettings.minMinutes||1, proactiveMsgSettings.maxMinutes||60)));
+  const hi = Math.max(lo, Math.min(300, Math.max(proactiveMsgSettings.minMinutes||1, proactiveMsgSettings.maxMinutes||60)));
   proactiveState.nextMsgAt = Date.now() + randomBetween(lo*60*1000, hi*60*1000);
 }
 function scheduleNextProactiveLetter(){
@@ -3579,11 +3649,11 @@ function openChatSettings(){
       <span>主动发消息给我</span>
       <div class="switch ${proactiveMsgSettings.enabled!==false?'on':''}" id="csProEnabled" onclick="this.classList.toggle('on')"><div class="dot"></div></div>
     </div>
-    <label class="field">最短：<span id="csProMinVal">${proactiveMsgSettings.minMinutes||5}</span> 分钟</label>
-    <input type="range" min="1" max="4320" step="1" value="${proactiveMsgSettings.minMinutes||5}" oninput="document.getElementById('csProMinVal').textContent=this.value" id="csProMin" style="width:100%;">
-    <label class="field">最长：<span id="csProMaxVal">${proactiveMsgSettings.maxMinutes||4320}</span> 分钟</label>
-    <input type="range" min="1" max="10080" step="1" value="${proactiveMsgSettings.maxMinutes||4320}" oninput="document.getElementById('csProMaxVal').textContent=this.value" id="csProMax" style="width:100%;">
-    <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">在最短～最长之间纯随机挑时间发，例如 5 分钟～4320 分钟（3 天）</div>
+    <label class="field">最短：<span id="csProMinVal">${proactiveMsgSettings.minMinutes||1}</span> 分钟</label>
+    <input type="range" min="1" max="300" step="1" value="${Math.min(300, proactiveMsgSettings.minMinutes||1)}" oninput="document.getElementById('csProMinVal').textContent=this.value" id="csProMin" style="width:100%;">
+    <label class="field">最长：<span id="csProMaxVal">${proactiveMsgSettings.maxMinutes||60}</span> 分钟</label>
+    <input type="range" min="1" max="300" step="1" value="${Math.min(300, proactiveMsgSettings.maxMinutes||60)}" oninput="document.getElementById('csProMaxVal').textContent=this.value" id="csProMax" style="width:100%;">
+    <div style="font-size:11px;color:var(--ink-soft);margin-top:2px;">在最短～最长之间纯随机挑时间发（范围 1 分钟～5 小时），可自己调节</div>
     <div class="box-title" style="margin-top:14px;">拼字卡</div>
     <div class="switch-row">
       <span>拼字卡<div style="font-size:10.5px;color:var(--ink-soft);font-weight:400;">开启后有机会随机把 2~5 张字卡拼在一起发，不是每条都拼</div></span>
@@ -3668,8 +3738,8 @@ async function saveChatSettings(){
   chatSettings.readNoReply = document.getElementById('csReadNoReply').classList.contains('on');
   await sSet('chat-settings', chatSettings);
   proactiveMsgSettings.enabled = document.getElementById('csProEnabled').classList.contains('on');
-  const pMin = parseInt(document.getElementById('csProMin').value,10) || 5;
-  const pMax = parseInt(document.getElementById('csProMax').value,10) || 4320;
+  const pMin = Math.max(1, Math.min(300, parseInt(document.getElementById('csProMin').value,10) || 1));
+  const pMax = Math.max(1, Math.min(300, parseInt(document.getElementById('csProMax').value,10) || 60));
   proactiveMsgSettings.minMinutes = Math.min(pMin, pMax);
   proactiveMsgSettings.maxMinutes = Math.max(pMin, pMax);
   await sSet('proactive-msg-settings', proactiveMsgSettings);
