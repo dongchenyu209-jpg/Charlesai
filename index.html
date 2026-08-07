@@ -3470,18 +3470,8 @@ async function sendGesture(key){
   chatMessages.push(gestureMsg);
   await recPut('chatMessages', gestureMsg);
   renderChat();
-  // 会不会回应、回应的是什么，都不确定——可能是任意一种内容（文字/表情包/红包/小动作），不局限于回个动作
-  if(Math.random() < 0.5){
-    setTimeout(async ()=>{
-      const reply = pickReplyFor('');
-      if(reply){
-        const replyMsg = { id:uid(), from:'bot', time:Date.now(), read:true, ...reply };
-        chatMessages.push(replyMsg);
-        await recPut('chatMessages', replyMsg);
-        renderChat();
-      }
-    }, 1200 + Math.random()*2500);
-  }
+  // 统一走已读不回 + 传讯设置里的回复延迟区间，跟普通消息回复用同一套逻辑
+  handleIncomingForBot('');
 }
 
 /* ============================================================
@@ -4386,8 +4376,7 @@ async function postMoment(){
   scheduleMomentReaction(post.id);
 }
 function scheduleMomentReaction(id){
-  // 点赞/评论：5 小时 ~ 3 天（随机）
-  const delayMs = randomBetween(5*3600*1000, 3*24*3600*1000);
+  const delayMs = getReplyDelayMs();
   setTimeout(async ()=>{
     const post = momentsPosts.find(p=>p.id===id); if(!post) return;
     post.liked = Math.random() < 0.75;
@@ -5119,7 +5108,6 @@ function renderSessionCard(sess, isCurrent){
   const dateStr = new Date(sess.startTime).toLocaleDateString('zh-CN');
   const remain = isCurrent ? (sess.workMs - (Date.now()-sess.startTime)) : 0;
   const badge = formatDurationShort(sess.workMs);
-  const sessId = sess.id || '';
   let recordsHtml = '';
   if(show){
     const list = (sess.records||[]).slice().reverse();
@@ -5128,21 +5116,15 @@ function renderSessionCard(sess, isCurrent){
     } else {
       recordsHtml = list.map(r=>{
         const t = new Date(r.time).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-        return `<div style="border:1px solid var(--rule);background:var(--paper-2);padding:10px 12px;margin-top:8px;border-radius:2px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:11px;color:var(--ink-soft);">🕐 ${t}</div>
-            <div style="margin-top:4px;font-size:13.5px;">${r.text}</div>
-          </div>
-          <span class="del" title="删除这条" onclick="event.stopPropagation();deleteMoyuRecord('${sessId}','${r.id}',${isCurrent?'true':'false'})">✕</span>
+        return `<div style="border:1px solid var(--rule);background:var(--paper-2);padding:10px 12px;margin-top:8px;border-radius:2px;">
+          <div style="font-size:11px;color:var(--ink-soft);">🕐 ${t}</div>
+          <div style="margin-top:4px;font-size:13.5px;">${r.text}</div>
         </div>`;
       }).join('');
     }
   } else {
     recordsHtml = `<div style="margin-top:10px;padding:12px;border:1px dashed var(--rule);color:var(--ink-soft);font-size:12.5px;text-align:center;">具体信息已隐藏</div>`;
   }
-  const sessionDel = isCurrent
-    ? `<div class="btn-row" style="margin-top:10px;"><div class="btn outline" style="flex:1;font-size:12px;" onclick="deleteMoyuCurrentSession()">🗑 删除当前班次</div></div>`
-    : `<div class="btn-row" style="margin-top:10px;"><div class="btn outline" style="flex:1;font-size:12px;" onclick="deleteMoyuHistorySession('${sessId}')">🗑 删除这一班</div></div>`;
   return `<div class="box" style="margin-bottom:12px;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div style="font-family:'Noto Serif SC',serif;font-weight:700;font-size:15px;">📍 ${sess.location||'未知地点'}</div>
@@ -5151,7 +5133,6 @@ function renderSessionCard(sess, isCurrent){
     <div style="font-size:11.5px;color:var(--ink-soft);margin-top:6px;">📅 ${dateStr}</div>
     ${isCurrent ? `<div style="margin-top:10px;padding:8px 10px;background:var(--blush);border:1px solid var(--rule);font-size:12.5px;text-align:center;">⏳ ${formatRemain(remain)}</div>` : ''}
     ${recordsHtml}
-    ${sessionDel}
   </div>`;
 }
 function renderMoyuNotePanelBody(tab){
@@ -5193,35 +5174,6 @@ async function clearMoyuHistory(){
   moyuState.history = [];
   await sSet('moyu-state', moyuState);
   renderMoyuNotePanelBody('history');
-  renderMoyuHome();
-}
-async function deleteMoyuRecord(sessionId, recordId, isCurrent){
-  if(!confirm('删除这条摸鱼记录？')) return;
-  let sess = null;
-  if(isCurrent && moyuState.currentSession && moyuState.currentSession.id === sessionId){
-    sess = moyuState.currentSession;
-  } else {
-    sess = (moyuState.history||[]).find(s=>s.id===sessionId);
-  }
-  if(!sess || !Array.isArray(sess.records)) return;
-  sess.records = sess.records.filter(r=>r.id!==recordId);
-  await sSet('moyu-state', moyuState);
-  renderMoyuNotePanelBody(isCurrent ? 'current' : 'history');
-  renderMoyuHome();
-}
-async function deleteMoyuHistorySession(sessionId){
-  if(!confirm('删除这一整班历史记录？')) return;
-  moyuState.history = (moyuState.history||[]).filter(s=>s.id!==sessionId);
-  await sSet('moyu-state', moyuState);
-  renderMoyuNotePanelBody('history');
-  renderMoyuHome();
-}
-async function deleteMoyuCurrentSession(){
-  if(!confirm('删除当前这一班摸鱼记录？删除后可以再开一班。')) return;
-  moyuState.currentSession = null;
-  await sSet('moyu-state', moyuState);
-  renderMoyuNotePanelBody('current');
-  renderMoyuHome();
 }
 
 let _moyuManageTab = 'activities';
