@@ -4404,8 +4404,8 @@ function scheduleMomentReaction(id){
   const delayMs = getReplyDelayMs();
   setTimeout(async ()=>{
     const post = momentsPosts.find(p=>p.id===id); if(!post) return;
-    post.liked = Math.random() < 0.75;
-    if(Math.random() < 0.8){
+    post.liked = Math.random() < 0.5;
+    if(Math.random() < 0.5){
       const c = getRandomCardText();
       if(c){ post.comment = c; post.commented = true; }
     }
