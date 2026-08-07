@@ -3474,18 +3474,8 @@ async function sendGesture(key){
   chatMessages.push(gestureMsg);
   await recPut('chatMessages', gestureMsg);
   renderChat();
-  // 会不会回应、回应的是什么，都不确定——可能是任意一种内容（文字/表情包/红包/小动作），不局限于回个动作
-  if(Math.random() < 0.5){
-    setTimeout(async ()=>{
-      const reply = pickReplyFor('');
-      if(reply){
-        const replyMsg = { id:uid(), from:'bot', time:Date.now(), read:true, ...reply };
-        chatMessages.push(replyMsg);
-        await recPut('chatMessages', replyMsg);
-        renderChat();
-      }
-    }, 1200 + Math.random()*2500);
-  }
+  // 小动作和普通传讯走同一套回复逻辑：遵守「最快/最慢回复」分钟区间，以及「已读不回」开关
+  handleIncomingForBot('[小动作]');
 }
 
 /* ============================================================
@@ -4390,7 +4380,8 @@ async function postMoment(){
   scheduleMomentReaction(post.id);
 }
 function scheduleMomentReaction(id){
-  const delayMs = getReplyDelayMs();
+  // 朋友圈：发动态后 TA 点赞/评论，纯随机 1 小时 ~ 7 天
+  const delayMs = randomBetween(1*3600*1000, 7*24*3600*1000);
   setTimeout(async ()=>{
     const post = momentsPosts.find(p=>p.id===id); if(!post) return;
     post.liked = Math.random() < 0.75;
@@ -4405,7 +4396,8 @@ function scheduleMomentReaction(id){
 
 /* ---- TA 也会自己挑内容、随机什么时候发朋友圈 ---- */
 function scheduleNextProactiveMoment(){
-  proactiveState.nextMomentAt = Date.now() + randomBetween(2*3600*1000, 6*24*3600*1000);
+  // 朋友圈：TA 主动发动态，纯随机 15 小时 ~ 7 天
+  proactiveState.nextMomentAt = Date.now() + randomBetween(15*3600*1000, 7*24*3600*1000);
 }
 async function sendProactiveMoment(){
   const lineCount = 1 + Math.floor(Math.random()*2);
@@ -4874,8 +4866,7 @@ function onImportBackupFile(e){
     await recClear('chatMessages'); await recPutMany('chatMessages', importedChat.map((m,i)=> m.time?m:{...m,time:Date.now()-(importedChat.length-i)}));
     await recClear('momentsPosts'); await recPutMany('momentsPosts', importedMoments.map((p,i)=> p.time?p:{...p,time:Date.now()-i}));
     await recClear('lifePhotos'); await recPutMany('lifePhotos', importedPhotos.map((p,i)=> ({...p,time:p.time||(Date.now()-i)})));
-    pageState = { chatMessages:{exhausted:false}, momentsPosts:{exhausted:false}, lifePhotos:{exhausted:false} };
-    chatMessages = await loadInitialPage('chatMessages');
+    pageState = { chatMessages:{exhausted:false}, randomBetween(15*60*1000, 5*24*3600*1000));
     momentsPosts = await loadInitialPage('momentsPosts');
     lifePhotos = await loadInitialPage('lifePhotos');
     applyTheme();
