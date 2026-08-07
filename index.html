@@ -1225,6 +1225,23 @@ async function migrateToRecordStores(){
    ============================================================ */
 let storageFailCount = 0;
 function hasCloudStorage(){ return typeof window.storage !== 'undefined' && window.storage !== null; }
+// ---- 云端写入排队：同一时刻只发一个 window.storage.set 请求，请求之间留出间隔，
+//      避免启动时好几个模块几乎同时存档而撞上服务端的限流(rate limit)。
+//      命中限流会自动等一下重试（最多3次），不会像以前那样立刻报错刷屏。
+let _cloudWriteQueue = Promise.resolve();
+function queueCloudWrite(fn){
+  const run = _cloudWriteQueue.then(async ()=>{
+    const result = await fn();
+    await new Promise(r=>setTimeout(r, 250)); // 请求间隔，给限流窗口留出余量
+    return result;
+  });
+  _cloudWriteQueue = run.catch(()=>{}); // 前一个失败也不能卡住队列
+  return run;
+}
+function isRateLimitError(e){
+  const msg = (e && e.message) ? e.message : String(e||'');
+  return /rate limit/i.test(msg);
+}
 async function sGet(key, fallback){
   if(hasCloudStorage()){
     try{
@@ -1249,13 +1266,21 @@ try{
 async function sSet(key, obj){
   let cloudOk = false;
   if(hasCloudStorage()){
-    try{
-      await window.storage.set(key, JSON.stringify(obj), false);
-      cloudOk = true;
-      storageFailCount = 0;
-    }catch(e){
-      storageFailCount++;
-      console.warn('cloud storage set failed (第'+storageFailCount+'次)', key, e);
+    const payload = JSON.stringify(obj);
+    for(let attempt=0; attempt<3 && !cloudOk; attempt++){
+      try{
+        await queueCloudWrite(()=> window.storage.set(key, payload, false));
+        cloudOk = true;
+        storageFailCount = 0;
+      }catch(e){
+        if(isRateLimitError(e) && attempt<2){
+          // 命中限流：安静地等一下再重试，不刷警告
+          await new Promise(r=>setTimeout(r, 600 * (attempt+1)));
+          continue;
+        }
+        storageFailCount++;
+        console.warn('cloud storage set failed (第'+storageFailCount+'次)', key, e);
+      }
     }
   }
   if(!cloudOk){
@@ -4498,7 +4523,7 @@ async function loadMoreMoments(){
 async function sendLetter(){
   const text = document.getElementById('letterText').value.trim();
   if(!text) return;
-  const hours = 10 + Math.random()*14; // 10~24 小时随机
+  const hours = 8 + Math.random()*7; // 8~15 小时随机
   const scheduledReplyAt = Date.now() + hours*3600*1000;
   const letter = { id:uid(), from:'user', content:text, time:Date.now(), replied:false, replyContent:null, replyTime:null, scheduledReplyAt };
   letters.unshift(letter);
@@ -4511,7 +4536,7 @@ function scheduleLetterReply(id, delayMs){
   setTimeout(async ()=>{
     const l = letters.find(x=>x.id===id);
     if(!l || l.replied) return;
-    const lineCount = 5 + Math.floor(Math.random()*11); // 一封回信拼 5~15 句字卡内容
+    const lineCount = 8 + Math.floor(Math.random()*8); // 一封回信拼 8~15 句字卡内容
     const lines = [];
     for(let i=0;i<lineCount;i++){ const c = getRandomCardText(); if(c) lines.push(c); }
     if(lines.length===0) return; // 字卡库是空的，先不生成回信
