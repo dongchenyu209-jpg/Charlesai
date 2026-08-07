@@ -4407,7 +4407,12 @@ async function postMoment(){
 /* ---- 朋友圈"待触发事件"：存时间戳靠轮询检查（跟写信/主动消息同一套思路），
    不用 setTimeout 直接等，因为现在延迟拉长到 1~48 小时，页面刷新/关闭会让 setTimeout 失效 ---- */
 async function addMomentEvent(type, postId){
-  momentEvents.push({ id:uid(), type, postId, dueAt: Date.now() + randomBetween(1*3600*1000, 48*3600*1000) });
+  // reaction（点赞/评论新动态）：1~48小时，模拟"过一阵子才刷到"
+  // commentReply（回你的评论）：1分钟~12小时，更贴近对话节奏，不至于拖太久显得冷淡
+  const range = type==='commentReply'
+    ? [1*60*1000, 12*3600*1000]
+    : [1*3600*1000, 48*3600*1000];
+  momentEvents.push({ id:uid(), type, postId, dueAt: Date.now() + randomBetween(range[0], range[1]) });
   await sSet('moment-events', momentEvents);
 }
 async function checkMomentEvents(){
