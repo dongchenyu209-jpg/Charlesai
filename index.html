@@ -4441,7 +4441,7 @@ async function addMomentComment(id){
         await recPut('momentsPosts', post);
         renderMoments();
       }
-    }, 1500 + Math.random()*3500);
+    }, randomBetween(15*60*1000, 5*24*3600*1000));  // 朋友圈评论回复：15 分钟 ~ 5 天
   }
 }
 
@@ -4866,7 +4866,8 @@ function onImportBackupFile(e){
     await recClear('chatMessages'); await recPutMany('chatMessages', importedChat.map((m,i)=> m.time?m:{...m,time:Date.now()-(importedChat.length-i)}));
     await recClear('momentsPosts'); await recPutMany('momentsPosts', importedMoments.map((p,i)=> p.time?p:{...p,time:Date.now()-i}));
     await recClear('lifePhotos'); await recPutMany('lifePhotos', importedPhotos.map((p,i)=> ({...p,time:p.time||(Date.now()-i)})));
-    pageState = { chatMessages:{exhausted:false}, randomBetween(15*60*1000, 5*24*3600*1000));
+    pageState = { chatMessages:{exhausted:false}, momentsPosts:{exhausted:false}, lifePhotos:{exhausted:false} };
+    chatMessages = await loadInitialPage('chatMessages');
     momentsPosts = await loadInitialPage('momentsPosts');
     lifePhotos = await loadInitialPage('lifePhotos');
     applyTheme();
