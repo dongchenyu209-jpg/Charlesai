@@ -765,6 +765,7 @@
           <div class="cstat" id="chatCStat" onclick="openTodayStatusPanel()" style="cursor:pointer;">在线</div>
         </div>
         <div class="mini-btn" style="width:32px;height:32px;font-size:14px;" onclick="openGesturePicker()" title="小动作">👋</div>
+        <div class="mini-btn" style="width:32px;height:32px;font-size:14px;" onclick="openWebLinkComposer()" title="发送网页链接">🔗</div>
         <div class="mini-btn" style="width:32px;height:32px;font-size:14px;" onclick="triggerProactiveMessage()" title="让TA主动找我">💌</div>
         <div class="mini-btn" style="width:32px;height:32px;font-size:14px;" onclick="startOutgoingCall()" title="打电话">📞</div>
         <div class="mini-btn" style="width:32px;height:32px;font-size:14px;" onclick="go('calls')" title="通话记录">🕑</div>
@@ -1780,6 +1781,7 @@ function renderTodayStatusHome(){
   if(!el) return;
   el.textContent = todayStatus ? todayStatus.text : '暂无，点此导入';
 }
+
 function openTodayStatusPanel(){
   openOverlay(`
     <div class="drawer-head"><h3>今日状态</h3><span class="close-x" onclick="closeOverlay()">✕</span></div>
@@ -3012,6 +3014,7 @@ async function moveSelectedCardsToNew(){
   await moveSelectedCardsTo(name);
 }
 function escAttr(s){ return s.replace(/'/g,"\\'"); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 async function deleteGroup(g){
   delete cardsData.groups[g]; await sSet('cards-data', cardsData); renderCardsView();
 }
@@ -3124,6 +3127,19 @@ function renderChat(preserveScroll, scrollToId){
         ${revealed ? `<div class="rp-amount">¥${Number(m.amount).toFixed(2)}</div>` : `<div class="rp-tap">点击查收</div>`}
         <div class="t" style="color:rgba(255,255,255,0.75);">${time}${quoteBtn}</div>
       </div>`;
+    } else if(m.type==='weblink'){
+      const collapsed = m.collapsed !== undefined ? m.collapsed : true;
+      const host = getUrlHost(m.content);
+      bubbleHtml = `<div class="msg ${m.from}" style="padding:0;overflow:hidden;max-width:78%;">
+        ${quoteRefHtml}
+        <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(0,0,0,0.04);font-size:12.5px;">
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🌐 ${escapeHtml(host)}</span>
+          <span onclick="event.stopPropagation();window.open('${escAttr(m.content)}','_blank')" style="cursor:pointer;padding:2px 4px;" title="新标签页打开">↗</span>
+          <span onclick="event.stopPropagation();toggleWebLinkCollapse('${m.id}')" style="cursor:pointer;padding:2px 4px;" title="展开/收起">${collapsed ? '▾' : '▴'}</span>
+        </div>
+        ${collapsed ? '' : `<div style="height:420px;background:#000;"><iframe src="${escAttr(m.content)}" style="width:100%;height:100%;border:0;"></iframe></div>`}
+        <div class="t" style="padding:4px 12px 8px;">${time}${(m.from==='user'&&m.read)?' · 已读':''}${quoteBtn}</div>
+      </div>`;
     } else {
       const readTag = (m.from==='user' && m.read) ? ' · 已读' : '';
       const skinClass = m.from==='user' ? 'message message-sent' : 'message message-received';
@@ -3190,6 +3206,7 @@ function buildQuotePreview(m){
   if(m.type==='sticker') return '[表情]';
   if(m.type==='redpacket') return '[红包]' + (m.note ? ('·'+m.note) : '');
   if(m.type==='image') return '[图片]';
+  if(m.type==='weblink') return '[网页链接]';
   if(m.type==='pat' || m.type==='gesture') return m.content;
   return (m.content||'').slice(0,40);
 }
@@ -3474,6 +3491,52 @@ function triggerProactiveMessage(){
   if(currentView==='inboxLetters'){ renderInboxLetters(); }
   else{ inboxLetterUnread = true; await sSet('inbox-letter-unread', true); renderUnreadDots(); }
 }
+
+/* ============================================================
+   发网页链接：粘贴链接 → 预览（iframe直接套，能不能显示看目标网站自己的安全策略）→ 发送到聊天，
+   变成一条可点开重新预览的消息卡片。不额外解析B站/抖音这些具体平台，统一通用嵌入，简单可靠。
+   ============================================================ */
+function openWebLinkComposer(){
+  openOverlay(`
+    <div class="drawer-head"><h3>发送网页链接</h3><span class="close-x" onclick="closeOverlay()">✕</span></div>
+    <input type="text" id="wlUrlInput" placeholder="粘贴链接（B站/抖音/任意网页）…">
+    <div class="btn-row"><div class="btn outline" onclick="previewWebLink()">👁 预览</div></div>
+    <div id="wlPreviewArea"></div>
+    <div style="font-size:12px;color:var(--ink-soft,#999);margin:8px 0;">提示：部分网站可能因安全限制无法嵌入，可尝试发送后查看</div>
+    <div class="btn-row"><div class="btn" onclick="sendWebLinkToChat()">📤 发送到聊天</div></div>
+  `);
+}
+function previewWebLink(){
+  const raw = (document.getElementById('wlUrlInput').value||'').trim();
+  const area = document.getElementById('wlPreviewArea');
+  if(!/^https?:\/\//i.test(raw)){ area.innerHTML = '<div style="padding:8px 2px;color:var(--ink-soft,#999);font-size:13px;">先粘贴一个完整链接（要带 http/https）～</div>'; return; }
+  area.innerHTML = `<div style="position:relative;padding-top:56.25%;border-radius:12px;overflow:hidden;background:#000;margin-top:8px;">
+    <iframe src="${raw}" frameborder="0" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe>
+  </div>`;
+}
+async function sendWebLinkToChat(){
+  const input = document.getElementById('wlUrlInput');
+  const raw = input ? input.value.trim() : '';
+  if(!/^https?:\/\//i.test(raw)){ alert('先粘贴一个完整链接（要带 http/https）～'); return; }
+  closeOverlay();
+  const msg = { id:uid(), from:'user', type:'weblink', content:raw, time:Date.now(), collapsed:false };
+  chatMessages.push(msg);
+  await recPut('chatMessages', msg);
+  renderChat();
+  handleIncomingForBot('');
+}
+function getUrlHost(url){
+  try{ return new URL(url).hostname; }catch(e){ return url; }
+}
+async function toggleWebLinkCollapse(id){
+  const m = chatMessages.find(x=>x.id===id);
+  if(!m) return;
+  const currentlyCollapsed = m.collapsed !== undefined ? m.collapsed : true;
+  m.collapsed = !currentlyCollapsed;
+  await recPut('chatMessages', m);
+  renderChat(true);
+}
+
 
 /* ============================================================
    小动作：拍一拍 / 戳一戳 / 贴一贴 / 抱一抱……可以直接选一个发过去
